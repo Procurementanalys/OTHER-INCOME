@@ -505,9 +505,50 @@ let sortDir = 1;
 let showTopUnpaid = true;
 let showTopUnpaidMode = false; // false = all, true = unpaid only
 
+// ==================== STORAGE MANAGEMENT ====================
+const STORAGE_KEY = 'alpro_invoice_data_v1';
+
+function saveDataToStorage() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(allData));
+    console.log('✓ Data disimpan ke localStorage:', allData.length, 'records');
+  } catch (e) {
+    console.error('Error saving to localStorage:', e);
+  }
+}
+
+function loadDataFromStorage() {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      allData = JSON.parse(stored);
+      console.log('✓ Data dimuat dari localStorage:', allData.length, 'records');
+      return true;
+    }
+  } catch (e) {
+    console.error('Error loading from localStorage:', e);
+  }
+  return false;
+}
+
+function clearStoredData() {
+  if (confirm('Yakin ingin hapus semua data yang disimpan? Ini akan kembali ke data default.')) {
+    localStorage.removeItem(STORAGE_KEY);
+    location.reload();
+  }
+}
+
 // ==================== INIT (DATA SUDAH TERTANAM LANGSUNG DI FILE INI) ====================
 function initApp() {
-  document.getElementById('last-update').textContent = 'Update: 18 Jun 2026 — Data Tertanam';
+  // Coba load data dari storage, jika tidak ada gunakan data default
+  const hasStoredData = loadDataFromStorage();
+  
+  if (hasStoredData) {
+    document.getElementById('last-update').textContent = 'Update: ' + new Date().toLocaleString('id-ID', {day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) + ' — Dari Local Storage';
+  } else {
+    document.getElementById('last-update').textContent = 'Update: 18 Jun 2026 — Data Default';
+  }
+  
   if (allData.length > 0) {
     document.getElementById('topbar-exports').style.display = 'flex';
   }
@@ -535,12 +576,13 @@ function handleFile(input) {
         return;
       }
       document.getElementById('topbar-exports').style.display = 'flex';
-      const lastUpdateStr = 'Preview: ' + new Date().toLocaleString('id-ID', {day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) + ' (lokal, belum permanen)';
-      document.getElementById('last-update').textContent = lastUpdateStr;
+      const lastUpdateStr = new Date().toLocaleString('id-ID', {day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+      document.getElementById('last-update').textContent = 'Update: ' + lastUpdateStr + ' — Disimpan ke Local Storage';
       updateTabCounts();
       renderAll();
+      saveDataToStorage();
       showLoading(false);
-      showToast('✓ ' + allData.length + ' invoice dimuat sebagai PREVIEW dari ' + file.name + '. Kirim file ini ke Claude supaya jadi permanen untuk semua orang.');
+      showToast('✓ ' + allData.length + ' invoice dimuat dan disimpan. Data akan tetap ada meskipun refresh halaman!');
     } catch(err) {
       showLoading(false);
       showToast('Error membaca file: ' + err.message, true);
