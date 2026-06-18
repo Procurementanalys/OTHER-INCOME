@@ -1,0 +1,1243 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Alpro Procurement - Other Income Monitoring</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1117;
+    --bg2: #161b27;
+    --bg3: #1e2535;
+    --bg4: #252d40;
+    --border: #2a3350;
+    --accent: #4f8ef7;
+    --accent2: #7c5ef5;
+    --green: #2ecc71;
+    --green-bg: rgba(46,204,113,0.12);
+    --red: #e74c3c;
+    --red-bg: rgba(231,76,60,0.12);
+    --yellow: #f39c12;
+    --yellow-bg: rgba(243,156,18,0.12);
+    --blue-bg: rgba(79,142,247,0.12);
+    --cyan: #00d2ff;
+    --cyan-bg: rgba(0,210,255,0.12);
+    --text: #e8eaf0;
+    --text2: #8892a4;
+    --text3: #5a6478;
+    --radius: 12px;
+    --radius-sm: 8px;
+    --shadow: 0 4px 24px rgba(0,0,0,0.4);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; min-height: 100vh; }
+
+  /* TOPBAR */
+  .topbar { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 0 2rem; display: flex; align-items: center; justify-content: space-between; height: 60px; position: sticky; top: 0; z-index: 100; }
+  .logo { display: flex; align-items: center; gap: 10px; }
+  .logo-icon { width: 32px; height: 32px; background: #fff; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 800; color: white; overflow: hidden; }
+  .logo-icon img { width: 100%; height: 100%; object-fit: contain; }
+  .logo-text { font-size: 15px; font-weight: 700; color: var(--text); }
+  .logo-sub { font-size: 11px; color: var(--text2); }
+  .topbar-right { display: flex; align-items: center; gap: 12px; }
+  .upload-btn { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: white; border: none; border-radius: var(--radius-sm); padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: opacity 0.2s; }
+  .upload-btn:hover { opacity: 0.85; }
+  .upload-btn input { display: none; }
+  .last-update { font-size: 11px; color: var(--text3); }
+  .btn-icon { background: var(--bg3); border: 1px solid var(--border); color: var(--text2); border-radius: var(--radius-sm); padding: 7px 10px; font-size: 13px; cursor: pointer; transition: all 0.2s; }
+  .btn-icon:hover { background: var(--bg4); color: var(--text); }
+
+  /* TABS */
+  .tabs-wrapper { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 0 2rem; display: flex; gap: 0; overflow-x: auto; }
+  .tab { padding: 14px 20px; font-size: 13px; font-weight: 500; color: var(--text2); cursor: pointer; border-bottom: 2px solid transparent; background: none; border-top: none; border-left: none; border-right: none; transition: all 0.2s; white-space: nowrap; }
+  .tab:hover { color: var(--text); }
+  .tab.on { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab .badge-count { background: var(--bg4); color: var(--text2); border-radius: 10px; padding: 1px 7px; font-size: 10px; margin-left: 6px; }
+
+  /* CONTENT */
+  .content { padding: 1.5rem 2rem; max-width: 1600px; margin: 0 auto; }
+
+  /* UPLOAD STATE */
+  .upload-state { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; gap: 1rem; }
+  .upload-box { background: var(--bg2); border: 2px dashed var(--border); border-radius: var(--radius); padding: 3rem 4rem; text-align: center; cursor: pointer; transition: all 0.2s; }
+  .upload-box:hover { border-color: var(--accent); background: var(--bg3); }
+  .upload-box .icon { font-size: 48px; margin-bottom: 1rem; }
+  .upload-box h2 { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+  .upload-box p { color: var(--text2); font-size: 13px; }
+  .upload-box .hint { margin-top: 12px; font-size: 11px; color: var(--text3); }
+
+  /* KPI GRID */
+  .kpi-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 1.25rem; }
+  .kpi { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; position: relative; overflow: hidden; cursor: pointer; transition: border-color 0.2s; }
+  .kpi:hover { border-color: var(--accent); }
+  .kpi::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+  .kpi.total::before { background: linear-gradient(90deg, var(--accent), var(--accent2)); }
+  .kpi.paid::before { background: var(--green); }
+  .kpi.unpaid::before { background: var(--red); }
+  .kpi.invoice::before { background: var(--yellow); }
+  .kpi.collection::before { background: var(--cyan); }
+  .kpi-label { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 10px; }
+  .kpi-val { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+  .kpi.total .kpi-val { color: var(--accent); }
+  .kpi.paid .kpi-val { color: var(--green); }
+  .kpi.unpaid .kpi-val { color: var(--red); }
+  .kpi.invoice .kpi-val { color: var(--yellow); }
+  .kpi.collection .kpi-val { color: var(--cyan); }
+  .kpi-sub { font-size: 11px; color: var(--text2); }
+  .kpi-progress { margin-top: 10px; height: 4px; background: var(--bg4); border-radius: 2px; overflow: hidden; }
+  .kpi-progress-fill { height: 100%; border-radius: 2px; transition: width 0.6s ease; }
+  .kpi.paid .kpi-progress-fill { background: var(--green); }
+  .kpi.unpaid .kpi-progress-fill { background: var(--red); }
+  .kpi.collection .kpi-progress-fill { background: var(--cyan); }
+
+  /* ALERT BAR */
+  .alert-bar { background: rgba(231,76,60,0.08); border: 1px solid rgba(231,76,60,0.3); border-radius: var(--radius-sm); padding: 10px 16px; margin-bottom: 1.25rem; display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text2); }
+  .alert-bar .alert-icon { color: var(--red); font-size: 16px; }
+  .alert-bar strong { color: var(--red); }
+  .alert-bar.hidden { display: none; }
+
+  /* CHARTS ROW */
+  .charts-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 1.25rem; }
+  .card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; }
+  .card-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .card-title .card-title-left { display: flex; align-items: center; gap: 8px; }
+  .card-title span { color: var(--text2); font-weight: 400; font-size: 12px; }
+  .chart-wrap { position: relative; height: 200px; }
+
+  /* TREND / AGING CHART ROW */
+  .two-col-row { display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; margin-bottom: 1.25rem; }
+  .wide-chart-wrap { position: relative; height: 230px; }
+
+  /* PT SUMMARY */
+  .pt-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .pt-row:last-child { border: none; }
+  .pt-left { flex: 1; }
+  .pt-name { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+  .pt-meta { font-size: 11px; color: var(--text2); }
+  .pt-bar { height: 4px; background: var(--bg4); border-radius: 2px; margin-top: 6px; overflow: hidden; width: 100%; }
+  .pt-bar-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg, var(--accent), var(--accent2)); }
+  .pt-right { text-align: right; min-width: 100px; }
+  .pt-amount { font-size: 13px; font-weight: 600; }
+  .pt-pct { font-size: 11px; color: var(--text2); margin-top: 2px; }
+
+  /* AGING BREAKDOWN */
+  .aging-list { display: flex; flex-direction: column; gap: 8px; }
+  .aging-item { display: flex; align-items: center; gap: 10px; }
+  .aging-label { font-size: 11px; color: var(--text2); min-width: 70px; }
+  .aging-bar-wrap { flex: 1; height: 8px; background: var(--bg4); border-radius: 4px; overflow: hidden; }
+  .aging-bar-fill { height: 100%; border-radius: 4px; transition: width 0.6s; }
+  .aging-amount { font-size: 11px; font-weight: 600; min-width: 80px; text-align: right; }
+  .aging-count { font-size: 10px; color: var(--text3); min-width: 40px; text-align: right; }
+
+  /* TABLE SECTION */
+  .table-section { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 1.25rem; }
+  .table-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+  .table-title { font-size: 14px; font-weight: 600; }
+  .filters { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .filter-select, .filter-input { background: var(--bg3); border: 1px solid var(--border); color: var(--text); border-radius: var(--radius-sm); padding: 7px 10px; font-size: 12px; outline: none; transition: border-color 0.2s; }
+  .filter-select:focus, .filter-input:focus { border-color: var(--accent); }
+  .filter-input { min-width: 180px; }
+  .filter-input::placeholder { color: var(--text3); }
+  .row-count { font-size: 11px; color: var(--text2); }
+  .table-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { padding: 10px 12px; text-align: left; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text3); background: var(--bg3); border-bottom: 1px solid var(--border); white-space: nowrap; cursor: pointer; user-select: none; }
+  th:hover { color: var(--text); }
+  th .sort-icon { margin-left: 4px; opacity: 0.4; }
+  th.sorted .sort-icon { opacity: 1; color: var(--accent); }
+  td { padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: middle; }
+  tr:last-child td { border: none; }
+  tr:hover td { background: var(--bg3); }
+  .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 20px; font-size: 10px; font-weight: 600; white-space: nowrap; }
+  .badge-paid { background: var(--green-bg); color: var(--green); }
+  .badge-unpaid { background: var(--red-bg); color: var(--red); }
+  .badge-done { background: var(--blue-bg); color: var(--accent); }
+  .badge-notyet { background: var(--yellow-bg); color: var(--yellow); }
+  .badge-na { background: var(--bg4); color: var(--text3); }
+  .pt-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; }
+  .pt-tag.PKU { background: rgba(79,142,247,0.15); color: #4f8ef7; }
+  .pt-tag.PRI { background: rgba(124,94,245,0.15); color: #9b7cf5; }
+  .pt-tag.AMOM { background: rgba(46,204,113,0.15); color: #2ecc71; }
+  .pt-tag.APD { background: rgba(243,156,18,0.15); color: #f39c12; }
+  .money { font-variant-numeric: tabular-nums; font-weight: 500; }
+  .customer-name { max-width: 160px; }
+  .ket-text { max-width: 200px; color: var(--text2); font-size: 11px; }
+  .empty-row td { text-align: center; padding: 3rem; color: var(--text3); }
+  .clickable-row { cursor: pointer; }
+  .clickable-row:hover td { background: var(--bg3) !important; }
+
+  /* EXPORT BUTTONS */
+  .export-row { display: flex; gap: 8px; }
+  .export-btn { background: var(--bg3); border: 1px solid var(--border); color: var(--text2); border-radius: var(--radius-sm); padding: 6px 12px; font-size: 11px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 6px; }
+  .export-btn:hover { background: var(--bg4); color: var(--text); border-color: var(--accent); }
+
+  /* PAGINATION */
+  .pagination { padding: 12px 20px; display: flex; align-items: center; justify-content: between; gap: 8px; border-top: 1px solid var(--border); }
+  .page-info { font-size: 12px; color: var(--text2); flex: 1; }
+  .page-btns { display: flex; gap: 4px; }
+  .page-btn { background: var(--bg3); border: 1px solid var(--border); color: var(--text2); border-radius: var(--radius-sm); padding: 5px 10px; font-size: 12px; cursor: pointer; transition: all 0.15s; }
+  .page-btn:hover { background: var(--bg4); color: var(--text); }
+  .page-btn.active { background: var(--accent); border-color: var(--accent); color: white; }
+  .page-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  /* TOP UNPAID */
+  .unpaid-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 1.25rem; }
+  .unpaid-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .unpaid-item:last-child { border: none; }
+  .unpaid-rank { width: 24px; height: 24px; border-radius: 6px; background: var(--bg4); color: var(--text3); font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .unpaid-rank.top3 { background: var(--red-bg); color: var(--red); }
+  .unpaid-info { flex: 1; min-width: 0; }
+  .unpaid-name { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .unpaid-ket { font-size: 10px; color: var(--text2); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .unpaid-amount { font-size: 12px; font-weight: 700; color: var(--red); text-align: right; flex-shrink: 0; }
+
+  /* MODAL */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 500; align-items: center; justify-content: center; }
+  .modal-overlay.show { display: flex; }
+  .modal { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); width: 640px; max-width: 95vw; max-height: 85vh; overflow-y: auto; }
+  .modal-head { padding: 20px 24px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; background: var(--bg2); }
+  .modal-title { font-size: 15px; font-weight: 700; }
+  .modal-close { background: none; border: none; color: var(--text2); font-size: 18px; cursor: pointer; padding: 4px; border-radius: 4px; transition: color 0.2s; }
+  .modal-close:hover { color: var(--text); }
+  .modal-body { padding: 20px 24px; }
+  .modal-field { margin-bottom: 14px; }
+  .modal-field-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text3); margin-bottom: 4px; }
+  .modal-field-value { font-size: 13px; color: var(--text); }
+  .modal-field-value a { color: var(--accent); text-decoration: none; }
+  .modal-field-value a:hover { text-decoration: underline; }
+  .modal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .modal-section { border-top: 1px solid var(--border); padding-top: 14px; margin-top: 4px; }
+  .modal-section-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text3); margin-bottom: 12px; }
+
+  /* SUMMARY PANEL */
+  .summary-panel { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; margin-bottom: 1.25rem; }
+  .summary-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .summary-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .summary-label { font-size: 12px; color: var(--text2); flex: 1; }
+  .summary-val { font-size: 12px; font-weight: 600; }
+  .summary-pct { font-size: 11px; color: var(--text3); min-width: 40px; text-align: right; }
+
+  /* SEARCH HIGHLIGHT */
+  mark { background: rgba(79,142,247,0.3); color: var(--text); border-radius: 2px; padding: 0 1px; }
+
+  /* LOADING */
+  .loading { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 999; align-items: center; justify-content: center; flex-direction: column; gap: 12px; }
+  .loading.show { display: flex; }
+  .spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* TOAST */
+  .toast { position: fixed; bottom: 2rem; right: 2rem; background: var(--bg3); border: 1px solid var(--green); color: var(--green); border-radius: var(--radius-sm); padding: 12px 18px; font-size: 13px; font-weight: 500; z-index: 999; transform: translateY(100px); opacity: 0; transition: all 0.3s; display: flex; align-items: center; gap: 8px; }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.error { border-color: var(--red); color: var(--red); }
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg2); }
+  ::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--border); }
+
+  /* RESPONSIVE */
+  @media (max-width: 1300px) {
+    .kpi-grid { grid-template-columns: repeat(3, 1fr); }
+    .charts-row { grid-template-columns: 1fr 1fr; }
+    .charts-row .card:last-child { grid-column: span 2; }
+    .unpaid-grid { grid-template-columns: 1fr; }
+    .two-col-row { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 768px) {
+    .content { padding: 1rem; }
+    .topbar { padding: 0 1rem; }
+    .tabs-wrapper { padding: 0 1rem; overflow-x: auto; }
+    .kpi-grid { grid-template-columns: 1fr 1fr; }
+    .charts-row { grid-template-columns: 1fr; }
+    .charts-row .card:last-child { grid-column: span 1; }
+    .logo-sub { display: none; }
+    .modal-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div class="loading" id="loading">
+  <div class="spinner"></div>
+  <div style="color:var(--text2);font-size:13px">Memproses data Excel...</div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- MODAL DETAIL -->
+<div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal" id="modal">
+    <div class="modal-head">
+      <div class="modal-title" id="modal-title">Detail Invoice</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="logo">
+    <div class="logo-icon"><img src="logo-alpro.png" alt="Alpro Logo"></div>
+    <div>
+      <div class="logo-text">Alpro Procurement</div>
+      <div class="logo-sub">Other Income Monitoring Dashboard</div>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <div class="last-update" id="last-update">Belum ada data</div>
+    <div class="export-row" id="topbar-exports" style="display:none">
+      <button class="export-btn" onclick="exportCSV()">⬇ CSV</button>
+      <button class="export-btn" onclick="exportExcel()">⬇ Excel</button>
+    </div>
+    <label class="upload-btn" id="upload-label" title="Upload file Excel untuk update data">
+      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+      Update Data
+      <input type="file" id="file-input" accept=".xlsx,.xls" onchange="handleFile(this)">
+    </label>
+  </div>
+</div>
+
+<!-- TABS -->
+<div class="tabs-wrapper">
+  <button class="tab on" onclick="setTab('all',this)">Semua PT <span class="badge-count" id="cnt-all">0</span></button>
+  <button class="tab" onclick="setTab('PKU',this)">PKU <span class="badge-count" id="cnt-PKU">0</span></button>
+  <button class="tab" onclick="setTab('PRI',this)">PRI <span class="badge-count" id="cnt-PRI">0</span></button>
+  <button class="tab" onclick="setTab('AMOM',this)">AMOM <span class="badge-count" id="cnt-AMOM">0</span></button>
+  <button class="tab" onclick="setTab('APD',this)">APD <span class="badge-count" id="cnt-APD">0</span></button>
+</div>
+
+<!-- MAIN CONTENT -->
+<div class="content" id="main-content">
+
+  <!-- UPLOAD PROMPT (deprecated, kept hidden) -->
+  <div class="upload-state" id="upload-prompt" style="display:none">
+    <label class="upload-box" for="file-input">
+      <div class="icon">📊</div>
+      <h2>Upload File Excel</h2>
+      <p>Seret file ke sini atau klik untuk memilih</p>
+      <p style="margin-top:8px;color:var(--text2)">Mendukung file <strong>.xlsx</strong> dengan sheet: PKU, PRI, AMOM, APD</p>
+      <div class="hint">Data diproses langsung di browser — tidak dikirim ke server manapun</div>
+    </label>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="dashboard" style="display:block">
+
+    <!-- ALERT BAR -->
+    <div class="alert-bar hidden" id="alert-bar">
+      <span class="alert-icon">⚠</span>
+      <span id="alert-text"></span>
+    </div>
+
+    <!-- KPIs (5 cards) -->
+    <div class="kpi-grid" id="kpi-grid">
+      <div class="kpi total" onclick="scrollToTable()">
+        <div class="kpi-label">Total Claim</div>
+        <div class="kpi-val" id="kv-total">Rp 0</div>
+        <div class="kpi-sub" id="ks-total">0 invoice</div>
+      </div>
+      <div class="kpi paid" onclick="quickFilter('SUDAH BAYAR','')">
+        <div class="kpi-label">Sudah Bayar</div>
+        <div class="kpi-val" id="kv-paid">Rp 0</div>
+        <div class="kpi-sub" id="ks-paid">0%</div>
+        <div class="kpi-progress"><div class="kpi-progress-fill" id="kp-paid" style="width:0%"></div></div>
+      </div>
+      <div class="kpi unpaid" onclick="quickFilter('BELUM BAYAR','')">
+        <div class="kpi-label">Belum Bayar</div>
+        <div class="kpi-val" id="kv-unpaid">Rp 0</div>
+        <div class="kpi-sub" id="ks-unpaid">0 invoice</div>
+        <div class="kpi-progress"><div class="kpi-progress-fill" id="kp-unpaid" style="width:0%"></div></div>
+      </div>
+      <div class="kpi invoice" onclick="quickFilter('','NOT YET')">
+        <div class="kpi-label">Invoice Done</div>
+        <div class="kpi-val" id="kv-inv">0</div>
+        <div class="kpi-sub" id="ks-inv">0 not yet</div>
+      </div>
+      <div class="kpi collection">
+        <div class="kpi-label">Collection Rate</div>
+        <div class="kpi-val" id="kv-rate">0%</div>
+        <div class="kpi-sub" id="ks-rate">target: 100%</div>
+        <div class="kpi-progress"><div class="kpi-progress-fill" id="kp-rate" style="width:0%"></div></div>
+      </div>
+    </div>
+
+    <!-- CHARTS ROW 1 -->
+    <div class="charts-row">
+      <div class="card">
+        <div class="card-title"><div class="card-title-left">Status per PT <span>paid vs unpaid</span></div></div>
+        <div class="chart-wrap"><canvas id="ptChart" role="img" aria-label="Paid vs unpaid per PT"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title"><div class="card-title-left">Metode Pembayaran <span>distribusi nilai</span></div></div>
+        <div class="chart-wrap"><canvas id="metodeChart" role="img" aria-label="Distribusi metode pembayaran"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title"><div class="card-title-left">Progress per PT</div></div>
+        <div id="pt-summary-list"></div>
+      </div>
+    </div>
+
+    <!-- CHARTS ROW 2: Trend + Aging -->
+    <div class="two-col-row">
+      <div class="card">
+        <div class="card-title">
+          <div class="card-title-left">Top 10 Customer by Claim</div>
+          <div style="display:flex;gap:6px">
+            <button class="export-btn" style="font-size:10px;padding:4px 8px" onclick="toggleCustomerChart()">Switch View</button>
+          </div>
+        </div>
+        <div class="wide-chart-wrap"><canvas id="customerChart" role="img" aria-label="Top customer by claim"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title"><div class="card-title-left">Aging Piutang <span>belum bayar</span></div></div>
+        <div id="aging-list" style="margin-top:8px"></div>
+      </div>
+    </div>
+
+    <!-- TOP UNPAID + PIE -->
+    <div class="unpaid-grid">
+      <div class="card">
+        <div class="card-title">
+          <div class="card-title-left">Top 10 Piutang Tertunggak</div>
+          <button class="export-btn" style="font-size:10px;padding:4px 8px" onclick="filterUnpaidOnly()">Lihat Semua</button>
+        </div>
+        <div id="top-unpaid-list"></div>
+      </div>
+      <div class="card">
+        <div class="card-title"><div class="card-title-left">Distribusi Nilai per PT</div></div>
+        <div class="chart-wrap"><canvas id="ptPieChart" role="img" aria-label="Distribusi nilai per PT"></canvas></div>
+      </div>
+    </div>
+
+    <!-- TABLE -->
+    <div class="table-section" id="table-section">
+      <div class="table-header">
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          <div>
+            <div class="table-title">Daftar Invoice</div>
+            <div class="row-count" id="row-count" style="margin-top:2px">0 baris</div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="export-btn" onclick="exportCSV()" style="background:rgba(46,204,113,0.12);border-color:rgba(46,204,113,0.4);color:#2ecc71;padding:8px 14px;font-size:12px;font-weight:600">
+              ⬇ Export CSV
+            </button>
+            <button class="export-btn" onclick="exportExcel()" style="background:rgba(79,142,247,0.12);border-color:rgba(79,142,247,0.4);color:#4f8ef7;padding:8px 14px;font-size:12px;font-weight:600">
+              ⬇ Export Excel
+            </button>
+          </div>
+        </div>
+        <div class="filters">
+          <select class="filter-select" id="f-pt" onchange="applyFilters()">
+            <option value="">Semua PT</option>
+            <option>PKU</option><option>PRI</option><option>AMOM</option><option>APD</option>
+          </select>
+          <select class="filter-select" id="f-bayar" onchange="applyFilters()">
+            <option value="">Semua Status Bayar</option>
+            <option value="SUDAH BAYAR">Sudah Bayar</option>
+            <option value="BELUM BAYAR">Belum Bayar</option>
+          </select>
+          <select class="filter-select" id="f-inv" onchange="applyFilters()">
+            <option value="">Semua Status Invoice</option>
+            <option value="INVOICE DONE">Invoice Done</option>
+            <option value="NOT YET">Not Yet</option>
+          </select>
+          <select class="filter-select" id="f-metode" onchange="applyFilters()">
+            <option value="">Semua Metode</option>
+            <option>Potong Tagihan</option>
+            <option>Transfer</option>
+          </select>
+          <input class="filter-input" id="f-search" type="text" placeholder="🔍  Cari customer / invoice / keterangan..." oninput="applyFilters()">
+          <button class="page-btn" onclick="clearFilters()" style="padding:7px 12px;font-size:12px">Reset</button>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th onclick="sortTable('no')"># <span class="sort-icon" id="sort-no">↕</span></th>
+              <th onclick="sortTable('pt')">PT <span class="sort-icon" id="sort-pt">↕</span></th>
+              <th onclick="sortTable('noInvoice')">No. Invoice <span class="sort-icon" id="sort-noInvoice">↕</span></th>
+              <th onclick="sortTable('customer')">Customer <span class="sort-icon" id="sort-customer">↕</span></th>
+              <th>Keterangan</th>
+              <th onclick="sortTable('total')" style="text-align:right">Total Claim <span class="sort-icon" id="sort-total">↕</span></th>
+              <th>Metode</th>
+              <th onclick="sortTable('feedbackFinance')">Status Invoice <span class="sort-icon" id="sort-feedbackFinance">↕</span></th>
+              <th onclick="sortTable('statusBayar')">Status Bayar <span class="sort-icon" id="sort-statusBayar">↕</span></th>
+              <th>Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </div>
+      <div class="pagination">
+        <div class="page-info" id="page-info"></div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <select class="filter-select" id="page-size-select" onchange="changePageSize()" style="padding:5px 8px;font-size:11px">
+            <option value="25">25/hal</option>
+            <option value="50" selected>50/hal</option>
+            <option value="100">100/hal</option>
+          </select>
+          <div class="page-btns" id="page-btns"></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /dashboard -->
+</div><!-- /content -->
+
+<script>
+// ==================== STATE ====================
+let allData = [];
+let filteredData = [];
+let curTab = 'all';
+let curPage = 1;
+let PAGE_SIZE = 50;
+let charts = {};
+let sortField = '';
+let sortDir = 1;
+let showTopUnpaid = true;
+let showTopUnpaidMode = false; // false = all, true = unpaid only
+
+// ==================== INIT / RESTORE FROM STORAGE ====================
+function initApp() {
+  try {
+    const saved = localStorage.getItem('alpro_data');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) allData = parsed;
+    }
+    const lastUpdate = localStorage.getItem('alpro_last_update');
+    if (lastUpdate) document.getElementById('last-update').textContent = lastUpdate;
+    if (allData.length > 0) {
+      document.getElementById('topbar-exports').style.display = 'flex';
+    }
+  } catch(e) {
+    console.error('LocalStorage restore error:', e);
+  }
+  updateTabCounts();
+  renderAll();
+}
+initApp();
+
+// ==================== FILE HANDLING ====================
+function handleFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  showLoading(true);
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      allData = parseWorkbook(wb);
+      if (allData.length === 0) {
+        showLoading(false);
+        showToast('Tidak ada data ditemukan. Cek format sheet.', true);
+        return;
+      }
+      document.getElementById('topbar-exports').style.display = 'flex';
+      const lastUpdateStr = 'Update: ' + new Date().toLocaleString('id-ID', {day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+      document.getElementById('last-update').textContent = lastUpdateStr;
+      try {
+        localStorage.setItem('alpro_data', JSON.stringify(allData));
+        localStorage.setItem('alpro_last_update', lastUpdateStr);
+        localStorage.setItem('alpro_filename', file.name);
+      } catch(e) { console.error('LocalStorage save error:', e); }
+      updateTabCounts();
+      renderAll();
+      showLoading(false);
+      showToast('✓ ' + allData.length + ' invoice berhasil dimuat dari ' + file.name);
+    } catch(err) {
+      showLoading(false);
+      showToast('Error membaca file: ' + err.message, true);
+      console.error(err);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+  input.value = '';
+}
+
+function parseWorkbook(wb) {
+  const sheets = ['PKU', 'PRI', 'AMOM', 'APD'];
+  const targetCols = {
+    'Nama Customer': 'customer',
+    'Keterangan di Invoice': 'ket',
+    'Keterangan di Invoic': 'ket',
+    'Total Claim': 'total',
+    'Metode Pembayaran': 'metode',
+    'Feedback Finance': 'feedbackFinance',
+    'FEEDBACK FINANCE': 'feedbackFinance',
+    'STATUS BAYAR': 'statusBayar',
+    'Status Bayar': 'statusBayar',
+    'STATUS PENGIRIMAN': 'feedbackFinance',
+    'No. Invoice': 'noInvoice',
+    'NO INVOICE': 'noInvoice',
+    'No. FPPI': 'noFPPI',
+    'Tanggal Email to Finance': 'tglEmail',
+    'Remarks': 'remarks',
+    'Bukti Pembayaran': 'buktiPembayaran',
+    'Bukti Invoice': 'buktiInvoice',
+    'PIC Penerima Invoice (Nama, no. telpon, email)': 'pic',
+    'Alamat Invoice': 'alamat',
+    'DPP': 'dpp',
+    'PPH 23 (2%)': 'pph',
+    'PPH': 'pph',
+    'PPN 11%': 'ppn',
+    'PPN': 'ppn',
+  };
+  let rows = [];
+  let globalIdx = 0;
+  sheets.forEach(sheetName => {
+    if (!wb.SheetNames.includes(sheetName)) return;
+    const ws = wb.Sheets[sheetName];
+    const json = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+    let headerRow = -1;
+    let colMap = {};
+    for (let r = 0; r < Math.min(6, json.length); r++) {
+      const row = json[r];
+      let found = false;
+      row.forEach((cell, c) => {
+        const v = String(cell).trim();
+        if (targetCols[v]) { colMap[targetCols[v]] = c; found = true; }
+      });
+      if (found && headerRow < 0) headerRow = r;
+    }
+    if (headerRow < 0) return;
+    for (let r = headerRow + 1; r < json.length; r++) {
+      const row = json[r];
+      const customer = colMap.customer !== undefined ? String(row[colMap.customer] || '').trim() : '';
+      if (!customer || customer === 'Nama Customer') continue;
+      const total = parseFloat(row[colMap.total] || 0) || 0;
+      if (total <= 0) continue;
+      let statusBayar = colMap.statusBayar !== undefined ? String(row[colMap.statusBayar] || '').trim().toUpperCase() : '';
+      if (statusBayar !== 'SUDAH BAYAR' && statusBayar !== 'BELUM BAYAR') statusBayar = '';
+      let feedbackFinance = colMap.feedbackFinance !== undefined ? String(row[colMap.feedbackFinance] || '').trim().toUpperCase() : '';
+      if (feedbackFinance !== 'INVOICE DONE' && feedbackFinance !== 'NOT YET') feedbackFinance = '';
+      globalIdx++;
+      rows.push({
+        _idx: globalIdx,
+        pt: sheetName,
+        customer,
+        ket: colMap.ket !== undefined ? String(row[colMap.ket] || '').trim() : '',
+        total,
+        metode: colMap.metode !== undefined ? String(row[colMap.metode] || '-').trim() : '-',
+        feedbackFinance,
+        statusBayar,
+        noInvoice: colMap.noInvoice !== undefined ? String(row[colMap.noInvoice] || '').trim() : '',
+        noFPPI: colMap.noFPPI !== undefined ? String(row[colMap.noFPPI] || '').trim() : '',
+        tglEmail: colMap.tglEmail !== undefined ? String(row[colMap.tglEmail] || '').trim() : '',
+        remarks: colMap.remarks !== undefined ? String(row[colMap.remarks] || '').trim() : '',
+        buktiPembayaran: colMap.buktiPembayaran !== undefined ? String(row[colMap.buktiPembayaran] || '').trim() : '',
+        buktiInvoice: colMap.buktiInvoice !== undefined ? String(row[colMap.buktiInvoice] || '').trim() : '',
+        pic: colMap.pic !== undefined ? String(row[colMap.pic] || '').trim() : '',
+        alamat: colMap.alamat !== undefined ? String(row[colMap.alamat] || '').trim() : '',
+        dpp: parseFloat(row[colMap.dpp] || 0) || 0,
+        ppn: parseFloat(row[colMap.ppn] || 0) || 0,
+        pph: parseFloat(row[colMap.pph] || 0) || 0,
+      });
+    }
+  });
+  return rows;
+}
+
+// ==================== RENDER ====================
+function renderAll() {
+  const scope = curTab === 'all' ? allData : allData.filter(r => r.pt === curTab);
+  renderKPIs(scope);
+  renderCharts(scope);
+  renderPTSummary();
+  renderTopUnpaid(scope);
+  renderAging(scope);
+  renderCustomerChart(scope);
+  renderAlertBar(scope);
+  applyFilters();
+}
+
+function fmtMoney(n) {
+  if (n >= 1e9) return 'Rp ' + (n/1e9).toFixed(2) + 'M';
+  if (n >= 1e6) return 'Rp ' + (n/1e6).toFixed(1) + 'jt';
+  return 'Rp ' + Math.round(n).toLocaleString('id-ID');
+}
+function fmtFull(n) {
+  return 'Rp ' + Math.round(n).toLocaleString('id-ID');
+}
+
+function renderKPIs(d) {
+  const total = d.reduce((s,r) => s+r.total, 0);
+  const paid = d.filter(r => r.statusBayar === 'SUDAH BAYAR').reduce((s,r) => s+r.total, 0);
+  const unpaid = d.filter(r => r.statusBayar === 'BELUM BAYAR').reduce((s,r) => s+r.total, 0);
+  const uCount = d.filter(r => r.statusBayar === 'BELUM BAYAR').length;
+  const invDone = d.filter(r => r.feedbackFinance === 'INVOICE DONE').length;
+  const invNotYet = d.filter(r => r.feedbackFinance === 'NOT YET').length;
+  const labeled = d.filter(r => r.statusBayar !== '');
+  const paidPct = labeled.length > 0 ? Math.round(d.filter(r=>r.statusBayar==='SUDAH BAYAR').length/labeled.length*100) : 0;
+  const unpaidPct = labeled.length > 0 ? Math.round(d.filter(r=>r.statusBayar==='BELUM BAYAR').length/labeled.length*100) : 0;
+  const totalLabeled = paid + unpaid;
+  const collRate = totalLabeled > 0 ? Math.round(paid/totalLabeled*100) : 0;
+
+  document.getElementById('kv-total').textContent = fmtMoney(total);
+  document.getElementById('ks-total').textContent = d.length + ' invoice';
+  document.getElementById('kv-paid').textContent = fmtMoney(paid);
+  document.getElementById('ks-paid').textContent = paidPct + '% dari total invoice';
+  document.getElementById('kp-paid').style.width = paidPct + '%';
+  document.getElementById('kv-unpaid').textContent = fmtMoney(unpaid);
+  document.getElementById('ks-unpaid').textContent = uCount + ' invoice tertunggak';
+  document.getElementById('kp-unpaid').style.width = unpaidPct + '%';
+  document.getElementById('kv-inv').textContent = invDone;
+  document.getElementById('ks-inv').textContent = invNotYet + ' belum dibuat';
+  document.getElementById('kv-rate').textContent = collRate + '%';
+  document.getElementById('ks-rate').textContent = fmtMoney(paid) + ' terkumpul';
+  document.getElementById('kp-rate').style.width = collRate + '%';
+}
+
+function renderAlertBar(d) {
+  const bar = document.getElementById('alert-bar');
+  const notYet = d.filter(r => r.feedbackFinance === 'NOT YET').length;
+  const highUnpaid = d.filter(r => r.statusBayar === 'BELUM BAYAR' && r.total >= 50000000);
+  if (notYet > 0 || highUnpaid.length > 0) {
+    let msgs = [];
+    if (notYet > 0) msgs.push('<strong>' + notYet + ' invoice</strong> belum dibuat');
+    if (highUnpaid.length > 0) msgs.push('<strong>' + highUnpaid.length + ' invoice</strong> nilai ≥ 50jt belum dibayar');
+    document.getElementById('alert-text').innerHTML = '⚡ Perhatian: ' + msgs.join(' · ');
+    bar.classList.remove('hidden');
+  } else {
+    bar.classList.add('hidden');
+  }
+}
+
+function renderCharts(scope) {
+  const pts = ['PKU','PRI','AMOM','APD'];
+  const paidVals = pts.map(pt => +(scope.filter(r=>r.pt===pt&&r.statusBayar==='SUDAH BAYAR').reduce((s,r)=>s+r.total,0)/1e9).toFixed(3));
+  const unpaidVals = pts.map(pt => +(scope.filter(r=>r.pt===pt&&r.statusBayar==='BELUM BAYAR').reduce((s,r)=>s+r.total,0)/1e9).toFixed(3));
+  if (charts.pt) charts.pt.destroy();
+  charts.pt = new Chart(document.getElementById('ptChart'), {
+    type: 'bar',
+    data: {
+      labels: pts,
+      datasets: [
+        { label: 'Sudah Bayar', data: paidVals, backgroundColor: 'rgba(46,204,113,0.7)', borderRadius: 4 },
+        { label: 'Belum Bayar', data: unpaidVals, backgroundColor: 'rgba(231,76,60,0.7)', borderRadius: 4 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#8892a4', font: { size: 11 }, boxWidth: 12 } } },
+      scales: {
+        x: { ticks: { color: '#8892a4', font: { size: 11 } }, grid: { color: '#2a3350' } },
+        y: { ticks: { color: '#8892a4', font: { size: 10 }, callback: v => v+'M' }, grid: { color: '#2a3350' } }
+      },
+      onClick: (evt, els) => {
+        if (els.length > 0) {
+          const pt = pts[els[0].index];
+          const ds = els[0].datasetIndex;
+          document.getElementById('f-pt').value = pt;
+          document.getElementById('f-bayar').value = ds === 0 ? 'SUDAH BAYAR' : 'BELUM BAYAR';
+          applyFilters();
+          scrollToTable();
+        }
+      }
+    }
+  });
+
+  // Metode donut
+  const metodeMap = {};
+  scope.forEach(r => {
+    const m = r.metode && r.metode !== '-' && r.metode !== 'nan' ? r.metode : 'Lainnya';
+    metodeMap[m] = (metodeMap[m]||0) + r.total;
+  });
+  const metodeLabels = Object.keys(metodeMap);
+  const metodeVals = metodeLabels.map(k => +(metodeMap[k]/1e6).toFixed(1));
+  const metodeColors = ['#4f8ef7','#7c5ef5','#2ecc71','#f39c12','#e74c3c','#1abc9c'];
+  if (charts.metode) charts.metode.destroy();
+  charts.metode = new Chart(document.getElementById('metodeChart'), {
+    type: 'doughnut',
+    data: {
+      labels: metodeLabels,
+      datasets: [{ data: metodeVals, backgroundColor: metodeColors.slice(0, metodeLabels.length), borderWidth: 2, borderColor: '#161b27' }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '65%',
+      plugins: {
+        legend: { position: 'bottom', labels: { color: '#8892a4', font: { size: 10 }, boxWidth: 10, padding: 8 } },
+        tooltip: { callbacks: { label: ctx => ' Rp ' + ctx.parsed.toFixed(1) + 'jt' } }
+      }
+    }
+  });
+
+  // PT Pie
+  const ptTotals = pts.map(pt => +(allData.filter(r=>r.pt===pt).reduce((s,r)=>s+r.total,0)/1e9).toFixed(3));
+  if (charts.ptPie) charts.ptPie.destroy();
+  charts.ptPie = new Chart(document.getElementById('ptPieChart'), {
+    type: 'doughnut',
+    data: {
+      labels: pts,
+      datasets: [{ data: ptTotals, backgroundColor: ['#4f8ef7','#9b7cf5','#2ecc71','#f39c12'], borderWidth: 2, borderColor: '#161b27' }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '60%',
+      plugins: {
+        legend: { position: 'bottom', labels: { color: '#8892a4', font: { size: 11 }, boxWidth: 12, padding: 8 } },
+        tooltip: { callbacks: { label: ctx => ' Rp ' + ctx.parsed.toFixed(3) + 'M' } }
+      },
+      onClick: (evt, els) => {
+        if (els.length > 0) {
+          const pt = pts[els[0].index];
+          setTab(pt, document.querySelector(`.tab:nth-child(${['PKU','PRI','AMOM','APD'].indexOf(pt)+2})`));
+        }
+      }
+    }
+  });
+}
+
+function renderPTSummary() {
+  const pts = ['PKU','PRI','AMOM','APD'];
+  const colors = { PKU: '#4f8ef7', PRI: '#9b7cf5', AMOM: '#2ecc71', APD: '#f39c12' };
+  let h = '';
+  pts.forEach(pt => {
+    const d = allData.filter(r => r.pt === pt);
+    const labeled = d.filter(r => r.statusBayar !== '');
+    const tot = labeled.reduce((s,r) => s+r.total, 0);
+    const paid = d.filter(r => r.statusBayar === 'SUDAH BAYAR').reduce((s,r) => s+r.total, 0);
+    const uCnt = d.filter(r => r.statusBayar === 'BELUM BAYAR').length;
+    const pct = tot > 0 ? Math.round(paid/tot*100) : 0;
+    h += `<div class="pt-row">
+      <div class="pt-left">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="pt-tag ${pt}">${pt}</span>
+          <span class="pt-name" style="font-size:12px">${d.length} invoice</span>
+        </div>
+        <div class="pt-meta">${uCnt} belum bayar · ${fmtMoney(d.filter(r=>r.statusBayar==='BELUM BAYAR').reduce((s,r)=>s+r.total,0))}</div>
+        <div class="pt-bar"><div class="pt-bar-fill" style="width:${pct}%;background:${colors[pt]}"></div></div>
+      </div>
+      <div class="pt-right">
+        <div class="pt-amount">${fmtMoney(d.reduce((s,r)=>s+r.total,0))}</div>
+        <div class="pt-pct">${pct}% lunas</div>
+      </div>
+    </div>`;
+  });
+  document.getElementById('pt-summary-list').innerHTML = h;
+}
+
+function renderTopUnpaid(scope) {
+  const top = scope.filter(r => r.statusBayar === 'BELUM BAYAR').sort((a,b) => b.total-a.total).slice(0,10);
+  if (!top.length) {
+    document.getElementById('top-unpaid-list').innerHTML = '<div style="text-align:center;padding:2rem;color:var(--green)">✓ Semua invoice sudah lunas!</div>';
+    return;
+  }
+  let h = '';
+  top.forEach((r,i) => {
+    h += `<div class="unpaid-item" onclick="showDetail(${r._idx})" style="cursor:pointer">
+      <div class="unpaid-rank ${i<3?'top3':''}">${i+1}</div>
+      <div class="unpaid-info">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span class="pt-tag ${r.pt}" style="font-size:9px">${r.pt}</span>
+          <span class="unpaid-name">${r.customer}</span>
+        </div>
+        <div class="unpaid-ket">${r.ket || '—'}</div>
+      </div>
+      <div class="unpaid-amount">${fmtMoney(r.total)}</div>
+    </div>`;
+  });
+  document.getElementById('top-unpaid-list').innerHTML = h;
+}
+
+function renderAging(scope) {
+  const unpaid = scope.filter(r => r.statusBayar === 'BELUM BAYAR');
+  // Group by approximate aging buckets based on invoice number / FPPI pattern
+  // Since no date parsed, group by no-invoice prefix (month-based) for visual variety
+  // Using claim count buckets: <5jt, 5-50jt, 50-100jt, >100jt
+  const buckets = [
+    { label: '< 5 juta', min: 0, max: 5e6, color: '#2ecc71' },
+    { label: '5–50 juta', min: 5e6, max: 50e6, color: '#f39c12' },
+    { label: '50–100 juta', min: 50e6, max: 100e6, color: '#e67e22' },
+    { label: '> 100 juta', min: 100e6, max: Infinity, color: '#e74c3c' },
+  ];
+  const maxTotal = unpaid.reduce((s,r) => s+r.total, 0) || 1;
+  let h = '<div class="aging-list">';
+  buckets.forEach(b => {
+    const items = unpaid.filter(r => r.total >= b.min && r.total < b.max);
+    const tot = items.reduce((s,r) => s+r.total, 0);
+    const pct = Math.round(tot/maxTotal*100);
+    h += `<div class="aging-item">
+      <div class="aging-label">${b.label}</div>
+      <div class="aging-bar-wrap"><div class="aging-bar-fill" style="width:${pct}%;background:${b.color}"></div></div>
+      <div class="aging-amount" style="color:${b.color}">${fmtMoney(tot)}</div>
+      <div class="aging-count">${items.length} inv</div>
+    </div>`;
+  });
+  h += '</div>';
+  // Add by PT breakdown
+  const pts = ['PKU','PRI','AMOM','APD'];
+  const ptColors = { PKU:'#4f8ef7', PRI:'#9b7cf5', AMOM:'#2ecc71', APD:'#f39c12' };
+  h += '<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">';
+  h += '<div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:var(--text3);margin-bottom:10px">Breakdown per PT</div>';
+  h += '<div class="aging-list">';
+  pts.forEach(pt => {
+    const items = unpaid.filter(r => r.pt === pt);
+    const tot = items.reduce((s,r) => s+r.total, 0);
+    const pct = Math.round(tot/maxTotal*100);
+    if (items.length === 0) return;
+    h += `<div class="aging-item">
+      <div class="aging-label"><span class="pt-tag ${pt}" style="font-size:9px">${pt}</span></div>
+      <div class="aging-bar-wrap"><div class="aging-bar-fill" style="width:${pct}%;background:${ptColors[pt]}"></div></div>
+      <div class="aging-amount" style="color:${ptColors[pt]}">${fmtMoney(tot)}</div>
+      <div class="aging-count">${items.length} inv</div>
+    </div>`;
+  });
+  h += '</div></div>';
+  document.getElementById('aging-list').innerHTML = h;
+}
+
+function renderCustomerChart(scope) {
+  const customerMap = {};
+  const data = showTopUnpaidMode ? scope.filter(r => r.statusBayar === 'BELUM BAYAR') : scope;
+  data.forEach(r => {
+    if (!customerMap[r.customer]) customerMap[r.customer] = { total: 0, paid: 0, unpaid: 0 };
+    customerMap[r.customer].total += r.total;
+    if (r.statusBayar === 'SUDAH BAYAR') customerMap[r.customer].paid += r.total;
+    if (r.statusBayar === 'BELUM BAYAR') customerMap[r.customer].unpaid += r.total;
+  });
+  const sorted = Object.entries(customerMap).sort((a,b) => b[1].total - a[1].total).slice(0,10);
+  const labels = sorted.map(e => e[0].length > 25 ? e[0].substring(0,23)+'…' : e[0]);
+  const paidData = sorted.map(e => +(e[1].paid/1e6).toFixed(1));
+  const unpaidData = sorted.map(e => +(e[1].unpaid/1e6).toFixed(1));
+
+  if (charts.customer) charts.customer.destroy();
+  charts.customer = new Chart(document.getElementById('customerChart'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Sudah Bayar', data: paidData, backgroundColor: 'rgba(46,204,113,0.7)', borderRadius: 3 },
+        { label: 'Belum Bayar', data: unpaidData, backgroundColor: 'rgba(231,76,60,0.7)', borderRadius: 3 },
+      ]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#8892a4', font: { size: 10 }, boxWidth: 10 } } },
+      scales: {
+        x: { stacked: true, ticks: { color: '#8892a4', font: { size: 10 }, callback: v => v+'jt' }, grid: { color: '#2a3350' } },
+        y: { stacked: true, ticks: { color: '#8892a4', font: { size: 10 } }, grid: { color: '#2a3350' } }
+      },
+      onClick: (evt, els) => {
+        if (els.length > 0) {
+          const name = sorted[els[0].index][0];
+          document.getElementById('f-search').value = name;
+          applyFilters();
+          scrollToTable();
+        }
+      }
+    }
+  });
+}
+
+function toggleCustomerChart() {
+  showTopUnpaidMode = !showTopUnpaidMode;
+  const scope = curTab === 'all' ? allData : allData.filter(r => r.pt === curTab);
+  const card = document.querySelector('.two-col-row .card .card-title .card-title-left');
+  card.textContent = showTopUnpaidMode ? 'Top 10 Customer Belum Bayar' : 'Top 10 Customer by Claim';
+  renderCustomerChart(scope);
+}
+
+// ==================== TABLE + FILTERS ====================
+function applyFilters() {
+  const fpt = document.getElementById('f-pt').value;
+  const fb = document.getElementById('f-bayar').value;
+  const fi = document.getElementById('f-inv').value;
+  const fm = document.getElementById('f-metode').value;
+  const q = (document.getElementById('f-search').value || '').toLowerCase();
+
+  let base = curTab === 'all' ? allData : allData.filter(r => r.pt === curTab);
+
+  filteredData = base.filter(r => {
+    if (fpt && r.pt !== fpt) return false;
+    if (fb && r.statusBayar !== fb) return false;
+    if (fi && r.feedbackFinance !== fi) return false;
+    if (fm && !r.metode.toLowerCase().includes(fm.toLowerCase())) return false;
+    if (q && !r.customer.toLowerCase().includes(q) && !r.ket.toLowerCase().includes(q) && !r.pt.toLowerCase().includes(q) && !r.noInvoice.toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  if (sortField) {
+    filteredData.sort((a,b) => {
+      let av = a[sortField], bv = b[sortField];
+      if (typeof av === 'string') av = av.toLowerCase();
+      if (typeof bv === 'string') bv = bv.toLowerCase();
+      return av < bv ? -sortDir : av > bv ? sortDir : 0;
+    });
+  }
+
+  curPage = 1;
+  document.getElementById('row-count').textContent = filteredData.length + ' baris ditemukan';
+  renderTable();
+}
+
+function clearFilters() {
+  document.getElementById('f-pt').value = '';
+  document.getElementById('f-bayar').value = '';
+  document.getElementById('f-inv').value = '';
+  document.getElementById('f-metode').value = '';
+  document.getElementById('f-search').value = '';
+  applyFilters();
+}
+
+function quickFilter(bayar, inv) {
+  document.getElementById('f-bayar').value = bayar;
+  document.getElementById('f-inv').value = inv;
+  applyFilters();
+  scrollToTable();
+}
+
+function filterUnpaidOnly() {
+  quickFilter('BELUM BAYAR', '');
+}
+
+function sortTable(field) {
+  if (sortField === field) { sortDir *= -1; }
+  else { sortField = field; sortDir = 1; }
+  document.querySelectorAll('th .sort-icon').forEach(el => { el.textContent = '↕'; el.parentElement.classList.remove('sorted'); });
+  const icon = document.getElementById('sort-' + field);
+  if (icon) { icon.textContent = sortDir === 1 ? '↑' : '↓'; icon.parentElement.classList.add('sorted'); }
+  applyFilters();
+}
+
+function renderTable() {
+  const totalPages = Math.ceil(filteredData.length / PAGE_SIZE);
+  const start = (curPage-1) * PAGE_SIZE;
+  const end = Math.min(start + PAGE_SIZE, filteredData.length);
+  const pageData = filteredData.slice(start, end);
+  const q = (document.getElementById('f-search').value || '').toLowerCase();
+
+  function hl(text) {
+    if (!q || !text) return text;
+    const re = new RegExp('(' + q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + ')', 'gi');
+    return text.replace(re, '<mark>$1</mark>');
+  }
+
+  if (!pageData.length) {
+    document.getElementById('table-body').innerHTML = '<tr class="empty-row"><td colspan="10">Tidak ada data yang sesuai filter</td></tr>';
+    document.getElementById('page-info').textContent = '';
+    document.getElementById('page-btns').innerHTML = '';
+    return;
+  }
+
+  let h = '';
+  pageData.forEach((r, i) => {
+    const bp = r.statusBayar === 'SUDAH BAYAR' ? '<span class="badge badge-paid">✓ Sudah Bayar</span>'
+      : r.statusBayar === 'BELUM BAYAR' ? '<span class="badge badge-unpaid">⚠ Belum Bayar</span>'
+      : '<span class="badge badge-na">—</span>';
+    const bi = r.feedbackFinance === 'INVOICE DONE' ? '<span class="badge badge-done">Invoice Done</span>'
+      : r.feedbackFinance === 'NOT YET' ? '<span class="badge badge-notyet">Not Yet</span>'
+      : '<span class="badge badge-na">—</span>';
+    const rowClass = r.statusBayar === 'BELUM BAYAR' ? 'clickable-row' : 'clickable-row';
+    h += `<tr class="${rowClass}" onclick="showDetail(${r._idx})">
+      <td style="color:var(--text3)">${start+i+1}</td>
+      <td><span class="pt-tag ${r.pt}">${r.pt}</span></td>
+      <td style="font-size:11px;color:var(--text2)">${hl(r.noInvoice) || '—'}</td>
+      <td class="customer-name" title="${r.customer}">${hl(r.customer)}</td>
+      <td class="ket-text" title="${r.ket}">${hl(r.ket.length > 45 ? r.ket.substring(0,45)+'…' : r.ket)}</td>
+      <td style="text-align:right" class="money">${fmtFull(r.total)}</td>
+      <td style="color:var(--text2);font-size:11px">${r.metode}</td>
+      <td>${bi}</td>
+      <td>${bp}</td>
+      <td><button class="export-btn" style="font-size:10px;padding:3px 8px" onclick="event.stopPropagation();showDetail(${r._idx})">Detail</button></td>
+    </tr>`;
+  });
+  document.getElementById('table-body').innerHTML = h;
+
+  // Pagination
+  document.getElementById('page-info').textContent = `Menampilkan ${start+1}–${end} dari ${filteredData.length} baris`;
+  let pbh = '';
+  pbh += `<button class="page-btn" onclick="goPage(${curPage-1})" ${curPage===1?'disabled':''}>‹</button>`;
+  const maxBtns = 7;
+  let pages = [];
+  if (totalPages <= maxBtns) { for (let i=1;i<=totalPages;i++) pages.push(i); }
+  else {
+    pages = [1];
+    if (curPage > 3) pages.push('...');
+    for (let i = Math.max(2,curPage-1); i <= Math.min(totalPages-1, curPage+1); i++) pages.push(i);
+    if (curPage < totalPages-2) pages.push('...');
+    pages.push(totalPages);
+  }
+  pages.forEach(p => {
+    if (p === '...') pbh += `<span style="color:var(--text3);padding:0 4px">…</span>`;
+    else pbh += `<button class="page-btn ${p===curPage?'active':''}" onclick="goPage(${p})">${p}</button>`;
+  });
+  pbh += `<button class="page-btn" onclick="goPage(${curPage+1})" ${curPage===totalPages||totalPages===0?'disabled':''}>›</button>`;
+  document.getElementById('page-btns').innerHTML = pbh;
+}
+
+function changePageSize() {
+  PAGE_SIZE = parseInt(document.getElementById('page-size-select').value);
+  curPage = 1;
+  renderTable();
+}
+
+function goPage(p) {
+  const totalPages = Math.ceil(filteredData.length / PAGE_SIZE);
+  if (p < 1 || p > totalPages) return;
+  curPage = p;
+  renderTable();
+}
+
+function scrollToTable() {
+  document.getElementById('table-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ==================== MODAL DETAIL ====================
+function showDetail(idx) {
+  const r = allData.find(x => x._idx === idx);
+  if (!r) return;
+  document.getElementById('modal-title').textContent = r.customer;
+  const bp = r.statusBayar === 'SUDAH BAYAR' ? '<span class="badge badge-paid">✓ Sudah Bayar</span>'
+    : r.statusBayar === 'BELUM BAYAR' ? '<span class="badge badge-unpaid">⚠ Belum Bayar</span>'
+    : '<span class="badge badge-na">—</span>';
+  const bi = r.feedbackFinance === 'INVOICE DONE' ? '<span class="badge badge-done">Invoice Done</span>'
+    : r.feedbackFinance === 'NOT YET' ? '<span class="badge badge-notyet">Not Yet</span>'
+    : '<span class="badge badge-na">—</span>';
+
+  function field(label, value, span) {
+    if (!value || value === '-' || value === 'nan' || value === 'NaN') value = '—';
+    return `<div class="modal-field" ${span?'style="grid-column:span 2"':''}>
+      <div class="modal-field-label">${label}</div>
+      <div class="modal-field-value">${value}</div>
+    </div>`;
+  }
+  function linkField(label, value) {
+    if (!value || value === '-' || value === 'nan' || value.startsWith('http') === false) {
+      return field(label, value && value.startsWith('http') ? `<a href="${value}" target="_blank">Buka Link ↗</a>` : value);
+    }
+    return `<div class="modal-field">
+      <div class="modal-field-label">${label}</div>
+      <div class="modal-field-value"><a href="${value}" target="_blank">Buka Link ↗</a></div>
+    </div>`;
+  }
+
+  let body = `
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+      <span class="pt-tag ${r.pt}" style="font-size:12px">${r.pt}</span>
+      ${bp} ${bi}
+    </div>
+    <div class="modal-grid">
+      ${field('No. Invoice', r.noInvoice)}
+      ${field('No. FPPI', r.noFPPI)}
+      ${field('Total Claim', '<span style="font-size:16px;font-weight:700;color:var(--accent)">' + fmtFull(r.total) + '</span>')}
+      ${field('Metode Pembayaran', r.metode)}
+      ${field('Keterangan', r.ket, true)}
+    </div>
+    <div class="modal-section">
+      <div class="modal-section-title">Info Keuangan</div>
+      <div class="modal-grid">
+        ${field('DPP', r.dpp > 0 ? fmtFull(r.dpp) : '—')}
+        ${field('PPN', r.ppn > 0 ? fmtFull(r.ppn) : '—')}
+        ${field('PPH', r.pph > 0 ? fmtFull(r.pph) : '—')}
+        ${field('Tgl Email to Finance', r.tglEmail)}
+      </div>
+    </div>
+    <div class="modal-section">
+      <div class="modal-section-title">Kontak & Dokumen</div>
+      <div class="modal-grid">
+        ${field('PIC', r.pic, true)}
+        ${field('Alamat Invoice', r.alamat, true)}
+        ${field('Bukti Pembayaran', r.buktiPembayaran)}
+        ${field('Remarks', r.remarks)}
+      </div>
+    </div>`;
+  if (r.buktiInvoice && r.buktiInvoice.startsWith('http')) {
+    body += `<div class="modal-section">
+      <div class="modal-section-title">Link</div>
+      <div class="modal-grid">
+        <div class="modal-field"><div class="modal-field-label">Bukti Invoice</div><div class="modal-field-value"><a href="${r.buktiInvoice}" target="_blank">Buka di Google Drive ↗</a></div></div>
+      </div>
+    </div>`;
+  }
+
+  document.getElementById('modal-body').innerHTML = body;
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('show');
+}
+
+// Close modal with Escape
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+// ==================== EXPORT ====================
+function exportCSV() {
+  const scope = filteredData.length > 0 ? filteredData : (curTab === 'all' ? allData : allData.filter(r => r.pt === curTab));
+  const headers = ['PT','No Invoice','Customer','Keterangan','Total Claim','Metode','Status Invoice','Status Bayar'];
+  const rows = scope.map(r => [r.pt, r.noInvoice, r.customer, r.ket, r.total, r.metode, r.feedbackFinance, r.statusBayar]);
+  let csv = headers.join(',') + '\n';
+  rows.forEach(r => { csv += r.map(v => '"' + String(v).replace(/"/g,'""') + '"').join(',') + '\n'; });
+  const blob = new Blob(['\ufeff'+csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'alpro_invoice_export.csv';
+  a.click(); URL.revokeObjectURL(url);
+  showToast('✓ CSV berhasil diekspor');
+}
+
+function exportExcel() {
+  const scope = filteredData.length > 0 ? filteredData : (curTab === 'all' ? allData : allData.filter(r => r.pt === curTab));
+  const data = [['PT','No Invoice','Customer','Keterangan','Total Claim','Metode','Status Invoice','Status Bayar']];
+  scope.forEach(r => data.push([r.pt, r.noInvoice, r.customer, r.ket, r.total, r.metode, r.feedbackFinance, r.statusBayar]));
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Invoice Export');
+  XLSX.writeFile(wb, 'alpro_invoice_export.xlsx');
+  showToast('✓ Excel berhasil diekspor');
+}
+
+// ==================== TABS ====================
+function setTab(tab, btn) {
+  curTab = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('on'));
+  if (btn) btn.classList.add('on');
+  if (document.getElementById('dashboard').style.display !== 'none') {
+    renderAll();
+  }
+}
+
+function updateTabCounts() {
+  const pts = ['PKU','PRI','AMOM','APD'];
+  document.getElementById('cnt-all').textContent = allData.length;
+  pts.forEach(pt => {
+    const el = document.getElementById('cnt-'+pt);
+    if (el) el.textContent = allData.filter(r=>r.pt===pt).length;
+  });
+}
+
+// ==================== UI HELPERS ====================
+function showLoading(show) {
+  document.getElementById('loading').classList.toggle('show', show);
+}
+
+function showToast(msg, isError = false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast' + (isError ? ' error' : '');
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+// Drag and drop
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('drop', e => {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (!file || !file.name.match(/\.xlsx?$/i)) return;
+  const dt = new DataTransfer();
+  dt.items.add(file);
+  document.getElementById('file-input').files = dt.files;
+  handleFile(document.getElementById('file-input'));
+});
+</script>
+</body>
+</html>
