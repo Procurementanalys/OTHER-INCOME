@@ -507,6 +507,7 @@ let showTopUnpaidMode = false; // false = all, true = unpaid only
 
 // ==================== STORAGE MANAGEMENT ====================
 const STORAGE_KEY = 'alpro_invoice_data_v1';
+const GOOGLE_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbx6gyYHhD5WDzG2mRzarwu_F0uNZNC3yYrpkbthynQ-YxOzN4qATVVvhWU3K4roLBu6Aw/exec';
 
 function saveDataToStorage() {
   try {
@@ -529,6 +530,45 @@ function loadDataFromStorage() {
     console.error('Error loading from localStorage:', e);
   }
   return false;
+}
+
+async function saveToGoogleSheets() {
+  if (allData.length === 0) {
+    console.log('⚠ Tidak ada data untuk disimpan');
+    return false;
+  }
+
+  const sheets = ['PKU', 'PRI', 'AMOM', 'APD'];
+  let successCount = 0;
+
+  for (const sheetName of sheets) {
+    const sheetData = allData.filter(r => r.pt === sheetName);
+    
+    try {
+      const formData = new FormData();
+      formData.append('action', 'clearAndSave');
+      formData.append('sheet', sheetName);
+      formData.append('data', JSON.stringify(sheetData));
+
+      const response = await fetch(GOOGLE_SHEETS_URL, {
+        method: 'POST',
+        body: formData
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        console.log(`✓ Sheet "${sheetName}" disimpan (${sheetData.length} records)`);
+        successCount++;
+      } else {
+        console.error(`✗ Gagal simpan sheet "${sheetName}":`, result.error);
+      }
+    } catch (err) {
+      console.error(`✗ Error menyimpan sheet "${sheetName}":`, err);
+    }
+  }
+
+  return successCount === sheets.length;
 }
 
 function clearStoredData() {
@@ -566,7 +606,7 @@ function handleFile(input) {
   if (!file) return;
   showLoading(true);
   const reader = new FileReader();
-  reader.onload = function(e) {
+  reader.onload = async function(e) {
     try {
       const wb = XLSX.read(e.target.result, { type: 'array' });
       allData = parseWorkbook(wb);
@@ -577,12 +617,23 @@ function handleFile(input) {
       }
       document.getElementById('topbar-exports').style.display = 'flex';
       const lastUpdateStr = new Date().toLocaleString('id-ID', {day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
-      document.getElementById('last-update').textContent = 'Update: ' + lastUpdateStr + ' — Disimpan ke Local Storage';
+      document.getElementById('last-update').textContent = 'Update: ' + lastUpdateStr + ' — Menyimpan ke Google Sheets...';
       updateTabCounts();
       renderAll();
       saveDataToStorage();
+      
+      // Simpan ke Google Sheets
+      const savedToSheets = await saveToGoogleSheets();
+      
+      if (savedToSheets) {
+        document.getElementById('last-update').textContent = 'Update: ' + lastUpdateStr + ' — ✓ Tersimpan di Google Sheets';
+        showToast('✓ ' + allData.length + ' invoice disimpan ke Google Sheets & Local Storage!');
+      } else {
+        document.getElementById('last-update').textContent = 'Update: ' + lastUpdateStr + ' — ⚠ Hanya Local Storage (cek console)';
+        showToast('⚠ Data disimpan Local Storage, tapi Google Sheets mungkin error. Cek console.', true);
+      }
+      
       showLoading(false);
-      showToast('✓ ' + allData.length + ' invoice dimuat dan disimpan. Data akan tetap ada meskipun refresh halaman!');
     } catch(err) {
       showLoading(false);
       showToast('Error membaca file: ' + err.message, true);
