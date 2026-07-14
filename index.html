@@ -117,7 +117,7 @@
   }
   .logo { display: flex; align-items: center; gap: 12px; }
   .logo-icon {
-    width: 60px; height: 60px;
+    width: 60px;px; height: 60px;
     background: #ffffff;
     border: 1px solid rgba(30,27,75,0.08);
     border-radius: 12px;
@@ -238,7 +238,7 @@
   /* ==================== KPI GRID ==================== */
   .kpi-grid {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(6, 1fr);
     gap: 18px;
     margin-bottom: 1.75rem;
   }
@@ -296,6 +296,7 @@
   .kpi.total .kpi-icon      { background: var(--blue-bg); }
   .kpi.paid .kpi-icon       { background: var(--green-bg); }
   .kpi.unpaid .kpi-icon     { background: var(--red-bg); }
+  .kpi.pending .kpi-icon    { background: var(--bg4); }
   .kpi.invoice .kpi-icon    { background: var(--yellow-bg); }
   .kpi.collection .kpi-icon { background: var(--cyan-bg); }
 
@@ -319,6 +320,7 @@
   .kpi.total .kpi-val      { color: var(--accent); }
   .kpi.paid .kpi-val       { color: var(--green); }
   .kpi.unpaid .kpi-val     { color: var(--red); }
+  .kpi.pending .kpi-val    { color: var(--text3); }
   .kpi.invoice .kpi-val    { color: var(--yellow); }
   .kpi.collection .kpi-val { color: var(--cyan); }
   .kpi-sub { font-size: 11.5px; color: var(--text2); font-weight: 600; }
@@ -983,7 +985,7 @@
       <span id="alert-text"></span>
     </div>
 
-    <!-- KPIs (5 cards) -->
+    <!-- KPIs (6 cards) -->
     <div class="kpi-grid" id="kpi-grid">
       <div class="kpi total" onclick="scrollToTable()">
         <div class="kpi-icon">💰</div>
@@ -998,12 +1000,18 @@
         <div class="kpi-sub" id="ks-paid">0%</div>
         <div class="kpi-progress"><div class="kpi-progress-fill" id="kp-paid" style="width:0%"></div></div>
       </div>
-      <div class="kpi unpaid" onclick="quickFilter('BELUM BAYAR','')">
+      <div class="kpi unpaid" onclick="quickFilter('BELUM BAYAR','INVOICE DONE')">
         <div class="kpi-icon">⏳</div>
-        <div class="kpi-label">Belum Bayar</div>
+        <div class="kpi-label">Piutang (Belum Bayar)</div>
         <div class="kpi-val" id="kv-unpaid">Rp 0</div>
         <div class="kpi-sub" id="ks-unpaid">0 invoice</div>
         <div class="kpi-progress"><div class="kpi-progress-fill" id="kp-unpaid" style="width:0%"></div></div>
+      </div>
+      <div class="kpi pending" onclick="quickFilter('BELUM BAYAR','NEW')">
+        <div class="kpi-icon">🆕</div>
+        <div class="kpi-label">Belum Invoice</div>
+        <div class="kpi-val" id="kv-new">Rp 0</div>
+        <div class="kpi-sub" id="ks-new">0 invoice · belum masuk piutang</div>
       </div>
       <div class="kpi invoice" onclick="quickFilter('','NOT YET')">
         <div class="kpi-icon">📄</div>
@@ -1091,6 +1099,7 @@
             <option value="">Semua Status Invoice</option>
             <option value="INVOICE DONE">Invoice Done</option>
             <option value="NOT YET">Not Yet</option>
+            <option value="NEW">New</option>
           </select>
           <select class="filter-select" id="f-metode" onchange="applyFilters()">
             <option value="">Semua Metode</option>
@@ -1167,6 +1176,48 @@ let _autoRefreshTimer = null;
 let _isRefreshing = false;
 let _lastServerUpdate = '';
 
+// Mapping nama kolom di Google Sheet (header asli, apapun variasinya) -> nama field camelCase yang dipakai app.
+// Dipakai untuk menormalkan row yang diambil via GET dari Apps Script, supaya data yang headernya
+// masih pakai judul kolom asli (bukan camelCase) tetap terbaca dengan benar oleh app.
+const SHEET_HEADER_MAP_ = {
+  'Nama Customer': 'customer',
+  'Keterangan di Invoice': 'ket',
+  'Keterangan di Invoic': 'ket',
+  'Category': 'category',
+  'CATEGORY': 'category',
+  'Kategori': 'category',
+  'Total Claim': 'total',
+  'Metode Pembayaran': 'metode',
+  'Feedback Finance': 'feedbackFinance',
+  'FEEDBACK FINANCE': 'feedbackFinance',
+  'STATUS BAYAR': 'statusBayar',
+  'Status Bayar': 'statusBayar',
+  'STATUS PENGIRIMAN': 'feedbackFinance',
+  'No. Invoice': 'noInvoice',
+  'NO INVOICE': 'noInvoice',
+  'No. FPPI': 'noFPPI',
+  'Tanggal Email to Finance': 'tglEmail',
+  'Remarks': 'remarks',
+  'Bukti Pembayaran': 'buktiPembayaran',
+  'Bukti Invoice': 'buktiInvoice',
+  'PIC Penerima Invoice (Nama, no. telpon, email)': 'pic',
+  'Alamat Invoice': 'alamat',
+  'DPP': 'dpp',
+  'PPH 23 (2%)': 'pph',
+  'PPH': 'pph',
+  'PPN 11%': 'ppn',
+  'PPN': 'ppn',
+};
+function remapSheetRow_(raw) {
+  const out = {};
+  Object.keys(raw).forEach(function (k) {
+    const key = SHEET_HEADER_MAP_[k] || SHEET_HEADER_MAP_[k.trim()] || k;
+    // Jangan timpa kalau field sudah keisi dari kolom lain yang lebih cocok (mis. ada 2 header yg mapping ke field sama)
+    if (out[key] === undefined || out[key] === '' || out[key] === null) out[key] = raw[k];
+  });
+  return out;
+}
+
 // ---------- LOCAL CACHE (fallback offline) ----------
 function saveDataToStorage() {
   try {
@@ -1176,9 +1227,19 @@ function saveDataToStorage() {
 function loadDataFromStorage() {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) { allData = JSON.parse(stored); return true; }
+    if (stored) { allData = JSON.parse(stored).map(normalizeStatuses_); return true; }
   } catch (e) { console.error('Cache error:', e); }
   return false;
+}
+
+// ---------- NORMALISASI STATUS KOSONG ----------
+// No. Invoice kosong & Feedback Finance kosong -> "New"
+// Status Bayar kosong -> "BELUM BAYAR"
+function normalizeStatuses_(r) {
+  if (!r.statusBayar) r.statusBayar = 'BELUM BAYAR';
+  if (!r.feedbackFinance) r.feedbackFinance = 'NEW';
+  if (!r.noInvoice) r.noInvoice = 'New';
+  return r;
 }
 function clearStoredData() {
   if (confirm('Yakin ingin hapus cache lokal? Data di Google Sheets TIDAK akan terhapus.')) {
@@ -1220,16 +1281,20 @@ function loadFromGoogleSheets(opts) {
       let idx = 0;
       SHEET_NAMES.forEach(function (sn) {
         const rows = (res.data && res.data[sn]) ? res.data[sn] : [];
-        rows.forEach(function (r) {
+        rows.forEach(function (rawRow) {
           idx++;
+          const r = remapSheetRow_(rawRow);
           // Normalisasi: pastikan field _idx & pt selalu ada
           r._idx = idx;
           r.pt = sn;
+          if (typeof r.statusBayar === 'string') r.statusBayar = r.statusBayar.trim().toUpperCase();
+          if (typeof r.feedbackFinance === 'string') r.feedbackFinance = r.feedbackFinance.trim().toUpperCase();
           // Pastikan numeric fields jadi number
           ['total', 'dpp', 'ppn', 'pph'].forEach(function (f) {
             if (r[f] === '' || r[f] === undefined || r[f] === null) r[f] = 0;
             else if (typeof r[f] === 'string') r[f] = parseFloat(r[f]) || 0;
           });
+          normalizeStatuses_(r);
           merged.push(r);
         });
       });
@@ -1448,7 +1513,7 @@ function parseWorkbook(wb) {
       let found = false;
       row.forEach((cell, c) => {
         const v = String(cell).trim();
-        if (targetCols[v]) { colMap[targetCols[v]] = c; found = true; }
+        if (targetCols[v] && colMap[targetCols[v]] === undefined) { colMap[targetCols[v]] = c; found = true; }
       });
       if (found && headerRow < 0) headerRow = r;
     }
@@ -1464,7 +1529,7 @@ function parseWorkbook(wb) {
       let feedbackFinance = colMap.feedbackFinance !== undefined ? String(row[colMap.feedbackFinance] || '').trim().toUpperCase() : '';
       if (feedbackFinance !== 'INVOICE DONE' && feedbackFinance !== 'NOT YET') feedbackFinance = '';
       globalIdx++;
-      rows.push({
+      rows.push(normalizeStatuses_({
         _idx: globalIdx,
         pt: sheetName,
         customer,
@@ -1485,7 +1550,7 @@ function parseWorkbook(wb) {
         dpp: parseFloat(row[colMap.dpp] || 0) || 0,
         ppn: parseFloat(row[colMap.ppn] || 0) || 0,
         pph: parseFloat(row[colMap.pph] || 0) || 0,
-      });
+      }));
     }
   });
   return rows;
@@ -1516,13 +1581,19 @@ function fmtFull(n) {
 function renderKPIs(d) {
   const total = d.reduce((s,r) => s+r.total, 0);
   const paid = d.filter(r => r.statusBayar === 'SUDAH BAYAR').reduce((s,r) => s+r.total, 0);
-  const unpaid = d.filter(r => r.statusBayar === 'BELUM BAYAR').reduce((s,r) => s+r.total, 0);
-  const uCount = d.filter(r => r.statusBayar === 'BELUM BAYAR').length;
+  // Piutang real: hanya baris yang invoice-nya SUDAH dibuat (Invoice Done) dan belum dibayar.
+  // Baris berstatus "New" belum punya invoice, jadi tidak dihitung sebagai piutang.
+  const unpaid = d.filter(r => r.statusBayar === 'BELUM BAYAR' && r.feedbackFinance === 'INVOICE DONE').reduce((s,r) => s+r.total, 0);
+  const uCount = d.filter(r => r.statusBayar === 'BELUM BAYAR' && r.feedbackFinance === 'INVOICE DONE').length;
+  // Belum Invoice: baris "New" + Belum Bayar -> invoice belum dibuat sama sekali, dipisah dari piutang.
+  const newUnpaid = d.filter(r => r.statusBayar === 'BELUM BAYAR' && r.feedbackFinance === 'NEW').reduce((s,r) => s+r.total, 0);
+  const newCount = d.filter(r => r.statusBayar === 'BELUM BAYAR' && r.feedbackFinance === 'NEW').length;
   const invDone = d.filter(r => r.feedbackFinance === 'INVOICE DONE').length;
   const invNotYet = d.filter(r => r.feedbackFinance === 'NOT YET').length;
+  const invNew = d.filter(r => r.feedbackFinance === 'NEW').length;
   const labeled = d.filter(r => r.statusBayar !== '');
   const paidPct = labeled.length > 0 ? Math.round(d.filter(r=>r.statusBayar==='SUDAH BAYAR').length/labeled.length*100) : 0;
-  const unpaidPct = labeled.length > 0 ? Math.round(d.filter(r=>r.statusBayar==='BELUM BAYAR').length/labeled.length*100) : 0;
+  const unpaidPct = labeled.length > 0 ? Math.round(uCount/labeled.length*100) : 0;
   const totalLabeled = paid + unpaid;
   const collRate = totalLabeled > 0 ? Math.round(paid/totalLabeled*100) : 0;
 
@@ -1534,8 +1605,10 @@ function renderKPIs(d) {
   document.getElementById('kv-unpaid').textContent = fmtMoney(unpaid);
   document.getElementById('ks-unpaid').textContent = uCount + ' invoice tertunggak';
   document.getElementById('kp-unpaid').style.width = unpaidPct + '%';
+  document.getElementById('kv-new').textContent = fmtMoney(newUnpaid);
+  document.getElementById('ks-new').textContent = newCount + ' invoice · belum masuk piutang';
   document.getElementById('kv-inv').textContent = invDone;
-  document.getElementById('ks-inv').textContent = invNotYet + ' belum dibuat';
+  document.getElementById('ks-inv').textContent = invNotYet + ' belum dibuat · ' + invNew + ' baru diajukan';
   document.getElementById('kv-rate').textContent = collRate + '%';
   document.getElementById('ks-rate').textContent = fmtMoney(paid) + ' terkumpul';
   document.getElementById('kp-rate').style.width = collRate + '%';
@@ -1860,6 +1933,7 @@ function renderTable() {
       : '<span class="badge badge-na">—</span>';
     const bi = r.feedbackFinance === 'INVOICE DONE' ? '<span class="badge badge-done">Invoice Done</span>'
       : r.feedbackFinance === 'NOT YET' ? '<span class="badge badge-notyet">Not Yet</span>'
+      : r.feedbackFinance === 'NEW' ? '<span class="badge badge-na">New</span>'
       : '<span class="badge badge-na">—</span>';
     const rowClass = r.statusBayar === 'BELUM BAYAR' ? 'clickable-row' : 'clickable-row';
     h += `<tr class="${rowClass}" onclick="showDetail(${r._idx})">
@@ -1927,6 +2001,7 @@ function showDetail(idx) {
     : '<span class="badge badge-na">—</span>';
   const bi = r.feedbackFinance === 'INVOICE DONE' ? '<span class="badge badge-done">Invoice Done</span>'
     : r.feedbackFinance === 'NOT YET' ? '<span class="badge badge-notyet">Not Yet</span>'
+    : r.feedbackFinance === 'NEW' ? '<span class="badge badge-na">New</span>'
     : '<span class="badge badge-na">—</span>';
 
   function field(label, value, span) {
