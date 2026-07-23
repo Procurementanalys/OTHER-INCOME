@@ -525,6 +525,8 @@
   }
 
   .table-scroll { overflow-x: auto; }
+  .year-summary-table th { position: static; cursor: default; }
+  .year-summary-table th:hover { color: var(--text2); background: var(--bg3); }
   table {
     width: 100%;
     border-collapse: collapse;
@@ -1040,6 +1042,15 @@
       </div>
     </div>
 
+    <!-- CHARTS ROW 1b -->
+    <div class="charts-row" style="grid-template-columns: 1fr">
+      <div class="card">
+        <div class="card-title"><div class="card-title-left">Tahun <span>breakdown nilai</span></div></div>
+        <div id="tahun-list"></div>
+        <div id="tahun-summary-table" style="margin-top:16px"></div>
+      </div>
+    </div>
+
     <!-- CHARTS ROW 2: Trend + Aging -->
     <div class="two-col-row">
       <div class="card">
@@ -1109,6 +1120,9 @@
           <select class="filter-select" id="f-category" onchange="applyFilters()">
             <option value="">Semua Category</option>
           </select>
+          <select class="filter-select" id="f-tahun" onchange="applyFilters()">
+            <option value="">Semua Tahun</option>
+          </select>
           <input class="filter-input" id="f-search" type="text" placeholder="🔍  Cari customer / invoice / keterangan / category..." oninput="applyFilters()">
           <button class="page-btn" onclick="clearFilters()" style="padding:7px 12px;font-size:12px">Reset</button>
         </div>
@@ -1122,6 +1136,7 @@
               <th onclick="sortTable('noInvoice')">No. Invoice <span class="sort-icon" id="sort-noInvoice">↕</span></th>
               <th onclick="sortTable('customer')">Customer <span class="sort-icon" id="sort-customer">↕</span></th>
               <th>Keterangan</th>
+              <th onclick="sortTable('tahun')">Tahun <span class="sort-icon" id="sort-tahun">↕</span></th>
               <th onclick="sortTable('category')">Category <span class="sort-icon" id="sort-category">↕</span></th>
               <th onclick="sortTable('total')" style="text-align:right">Total Claim <span class="sort-icon" id="sort-total">↕</span></th>
               <th>Metode</th>
@@ -1239,7 +1254,31 @@ function normalizeStatuses_(r) {
   if (!r.statusBayar) r.statusBayar = 'BELUM BAYAR';
   if (!r.feedbackFinance) r.feedbackFinance = 'NEW';
   if (!r.noInvoice) r.noInvoice = 'New';
+  r.tahun = extractYearFromKet_(r.ket);
   return r;
+}
+
+// ---------- DETEKSI TAHUN OTOMATIS DARI "Keterangan di Invoice" ----------
+// Contoh: "CLAIM PROMOTION INSTORE JUNI 2026 PKU" -> "2026"
+//         "CLAIM PROMOTION GRAND OPENING FEB 25"   -> "2025"
+function extractYearFromKet_(ket) {
+  if (!ket) return '';
+  const text = String(ket).toUpperCase();
+
+  // 1) Prioritas: tahun 4-digit eksplisit (2000-2099), paling akurat
+  //    (?<!\d)...(?!\d) supaya "JUNI2026" (nempel tanpa spasi) tetap kebaca,
+  //    tapi tidak salah ambil sebagian dari angka yang lebih panjang.
+  const m4 = text.match(/(?<!\d)(20\d{2})(?!\d)/);
+  if (m4) return m4[1];
+
+  // 2) Nama/singkatan bulan (ID) diikuti 2 digit tahun, mis: "FEB 25", "FEB'25", "FEB-25", "JUNI25"
+  const MONTHS_ = 'JANUARI|FEBRUARI|MARET|APRIL|MEI|JUNI|JULI|AGUSTUS|SEPTEMBER|OKTOBER|NOVEMBER|DESEMBER|' +
+                  'JAN|FEB|MAR|APR|JUN|JUL|AGT|AGST|AGU|SEP|SEPT|OKT|NOV|DES';
+  const reMonthYear = new RegExp('(?:' + MONTHS_ + ')\\s*[\'’\\-\\/]?\\s*(\\d{2})(?!\\d)');
+  const m2 = text.match(reMonthYear);
+  if (m2) return '20' + m2[1];
+
+  return '';
 }
 function clearStoredData() {
   if (confirm('Yakin ingin hapus cache lokal? Data di Google Sheets TIDAK akan terhapus.')) {
@@ -1631,6 +1670,7 @@ function renderAlertBar(d) {
 
 function renderCharts(scope) {
   renderCategoryList(scope);
+  renderYearList(scope);
 }
 
 function renderCategoryList(scope) {
@@ -1670,6 +1710,121 @@ function filterByCategory(cat) {
   const sel = document.getElementById('f-category');
   if ([...sel.options].some(o => o.value === cat)) {
     sel.value = cat;
+    applyFilters();
+    scrollToTable();
+  }
+}
+
+function renderYearList(scope) {
+  const yrMap = {};
+  scope.forEach(r => {
+    const y = r.tahun && String(r.tahun).trim() ? String(r.tahun).trim() : 'Tanpa Tahun';
+    if (!yrMap[y]) yrMap[y] = { total: 0, count: 0 };
+    yrMap[y].total += r.total;
+    yrMap[y].count += 1;
+  });
+  const palette = ['#4f46e5','#8b5cf6','#059669','#d97706','#e11d48','#0891b2','#c026d3','#0ea5e9'];
+  // Urutkan tahun terbaru dulu; "Tanpa Tahun" selalu di paling akhir
+  const years = Object.keys(yrMap).sort((a, b) => {
+    if (a === 'Tanpa Tahun') return 1;
+    if (b === 'Tanpa Tahun') return -1;
+    return b.localeCompare(a);
+  });
+  const maxTotal = Math.max(...years.map(y => yrMap[y].total), 1);
+
+  if (!years.length) {
+    document.getElementById('tahun-list').innerHTML = '<div style="text-align:center;padding:1.5rem;color:var(--text3);font-size:12px">Belum ada data Tahun</div>';
+    return;
+  }
+
+  let h = '<div class="aging-list" style="gap:12px">';
+  years.forEach((y, i) => {
+    const { total, count } = yrMap[y];
+    const pct = Math.round(total / maxTotal * 100);
+    const color = palette[i % palette.length];
+    h += `<div class="aging-item" style="cursor:pointer;gap:14px" onclick="filterByYear('${y.replace(/'/g,"\\'")}')" title="${y}">
+      <div class="aging-label" style="min-width:160px;max-width:220px;white-space:normal;line-height:1.3;font-size:12px;font-weight:600;color:var(--text)">${y}</div>
+      <div class="aging-bar-wrap" style="height:10px"><div class="aging-bar-fill" style="width:${pct}%;background:${color}"></div></div>
+      <div class="aging-amount" style="color:${color};font-size:13px;min-width:90px">${fmtMoney(total)}</div>
+      <div class="aging-count" style="min-width:50px">${count} inv</div>
+    </div>`;
+  });
+  h += '</div>';
+  document.getElementById('tahun-list').innerHTML = h;
+  renderYearSummaryTable(scope);
+}
+
+// ---------- RINGKASAN DETAIL PER TAHUN (total invoice, sudah/belum bayar, new) ----------
+function renderYearSummaryTable(scope) {
+  const yrMap = {};
+  scope.forEach(r => {
+    const y = r.tahun && String(r.tahun).trim() ? String(r.tahun).trim() : 'Tanpa Tahun';
+    if (!yrMap[y]) yrMap[y] = { total: 0, count: 0, paidCount: 0, paidTotal: 0, unpaidCount: 0, unpaidTotal: 0, newCount: 0, newTotal: 0 };
+    const m = yrMap[y];
+    m.count += 1;
+    m.total += r.total;
+    if (r.statusBayar === 'SUDAH BAYAR') { m.paidCount += 1; m.paidTotal += r.total; }
+    // Belum Bayar (piutang riil): invoice sudah dibuat tapi belum dibayar
+    if (r.statusBayar === 'BELUM BAYAR' && r.feedbackFinance === 'INVOICE DONE') { m.unpaidCount += 1; m.unpaidTotal += r.total; }
+    // New / Belum Invoice: invoice belum dibuat sama sekali
+    if (r.feedbackFinance === 'NEW') { m.newCount += 1; m.newTotal += r.total; }
+  });
+
+  const years = Object.keys(yrMap).sort((a, b) => {
+    if (a === 'Tanpa Tahun') return 1;
+    if (b === 'Tanpa Tahun') return -1;
+    return b.localeCompare(a);
+  });
+
+  const container = document.getElementById('tahun-summary-table');
+  if (!years.length) {
+    container.innerHTML = '<div style="text-align:center;padding:1rem;color:var(--text3);font-size:12px">Belum ada data</div>';
+    return;
+  }
+
+  // Baris total keseluruhan (semua tahun yang tampil di scope saat ini)
+  const grand = years.reduce((acc, y) => {
+    const m = yrMap[y];
+    acc.count += m.count; acc.total += m.total;
+    acc.paidCount += m.paidCount; acc.paidTotal += m.paidTotal;
+    acc.unpaidCount += m.unpaidCount; acc.unpaidTotal += m.unpaidTotal;
+    acc.newCount += m.newCount; acc.newTotal += m.newTotal;
+    return acc;
+  }, { total: 0, count: 0, paidCount: 0, paidTotal: 0, unpaidCount: 0, unpaidTotal: 0, newCount: 0, newTotal: 0 });
+
+  function row(label, m, isTotal) {
+    const style = isTotal ? 'style="border-top:2px solid var(--border);font-weight:700"' : '';
+    const clickAttr = isTotal ? '' : `onclick="filterByYear('${String(label).replace(/'/g,"\\'")}')" style="cursor:pointer"`;
+    return `<tr ${clickAttr}${isTotal ? ' ' + style : ''}>
+      <td style="font-weight:700;color:var(--text)">${label}</td>
+      <td style="text-align:center">${m.count}</td>
+      <td class="money" style="text-align:right">${fmtFull(m.total)}</td>
+      <td style="text-align:center"><span class="badge badge-paid">${m.paidCount}</span><div style="font-size:10px;color:var(--text3);margin-top:2px">${fmtMoney(m.paidTotal)}</div></td>
+      <td style="text-align:center"><span class="badge badge-unpaid">${m.unpaidCount}</span><div style="font-size:10px;color:var(--text3);margin-top:2px">${fmtMoney(m.unpaidTotal)}</div></td>
+      <td style="text-align:center"><span class="badge badge-na">${m.newCount}</span><div style="font-size:10px;color:var(--text3);margin-top:2px">${fmtMoney(m.newTotal)}</div></td>
+    </tr>`;
+  }
+
+  let h = `<div class="table-scroll"><table class="year-summary-table">
+    <thead><tr>
+      <th>Tahun</th>
+      <th style="text-align:center">Total Invoice</th>
+      <th style="text-align:right">Total Nilai</th>
+      <th style="text-align:center">Sudah Bayar</th>
+      <th style="text-align:center">Belum Bayar</th>
+      <th style="text-align:center">Belum Invoice (New)</th>
+    </tr></thead><tbody>`;
+  years.forEach(y => { h += row(y, yrMap[y], false); });
+  if (years.length > 1) h += row('TOTAL', grand, true);
+  h += '</tbody></table></div>';
+  container.innerHTML = h;
+}
+
+function filterByYear(y) {
+  const sel = document.getElementById('f-tahun');
+  if (y === 'Tanpa Tahun') y = '';
+  if (!y || [...sel.options].some(o => o.value === y)) {
+    sel.value = y;
     applyFilters();
     scrollToTable();
   }
@@ -1834,11 +1989,13 @@ function applyFilters() {
   const fi = document.getElementById('f-inv').value;
   const fm = document.getElementById('f-metode').value;
   const fc = document.getElementById('f-category').value;
+  const fy = document.getElementById('f-tahun').value;
   const q = (document.getElementById('f-search').value || '').toLowerCase();
 
   let base = curTab === 'all' ? allData : allData.filter(r => r.pt === curTab);
 
   populateCategoryFilter(base, fc);
+  populateYearFilter(base, fy);
 
   filteredData = base.filter(r => {
     if (fpt && r.pt !== fpt) return false;
@@ -1846,6 +2003,7 @@ function applyFilters() {
     if (fi && r.feedbackFinance !== fi) return false;
     if (fm && !r.metode.toLowerCase().includes(fm.toLowerCase())) return false;
     if (fc && r.category !== fc) return false;
+    if (fy && r.tahun !== fy) return false;
     if (q && !r.customer.toLowerCase().includes(q) && !r.ket.toLowerCase().includes(q) && !r.pt.toLowerCase().includes(q) && !r.noInvoice.toLowerCase().includes(q) && !(r.category||'').toLowerCase().includes(q)) return false;
     return true;
   });
@@ -1876,12 +2034,24 @@ function populateCategoryFilter(scopeData, currentVal) {
   }
 }
 
+function populateYearFilter(scopeData, currentVal) {
+  const sel = document.getElementById('f-tahun');
+  const years = Array.from(new Set(scopeData.map(r => r.tahun).filter(Boolean))).sort((a,b) => b.localeCompare(a));
+  const optsHtml = '<option value="">Semua Tahun</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
+  if (sel.dataset.rendered !== optsHtml) {
+    sel.innerHTML = optsHtml;
+    sel.dataset.rendered = optsHtml;
+    sel.value = currentVal && years.includes(currentVal) ? currentVal : '';
+  }
+}
+
 function clearFilters() {
   document.getElementById('f-pt').value = '';
   document.getElementById('f-bayar').value = '';
   document.getElementById('f-inv').value = '';
   document.getElementById('f-metode').value = '';
   document.getElementById('f-category').value = '';
+  document.getElementById('f-tahun').value = '';
   document.getElementById('f-search').value = '';
   applyFilters();
 }
@@ -1920,7 +2090,7 @@ function renderTable() {
   }
 
   if (!pageData.length) {
-    document.getElementById('table-body').innerHTML = '<tr class="empty-row"><td colspan="11">Tidak ada data yang sesuai filter</td></tr>';
+    document.getElementById('table-body').innerHTML = '<tr class="empty-row"><td colspan="12">Tidak ada data yang sesuai filter</td></tr>';
     document.getElementById('page-info').textContent = '';
     document.getElementById('page-btns').innerHTML = '';
     return;
@@ -1942,6 +2112,7 @@ function renderTable() {
       <td style="font-size:11px;color:var(--text2)">${hl(r.noInvoice) || '—'}</td>
       <td class="customer-name" title="${r.customer}">${hl(r.customer)}</td>
       <td class="ket-text" title="${r.ket}">${hl(r.ket.length > 45 ? r.ket.substring(0,45)+'…' : r.ket)}</td>
+      <td style="font-size:11px;color:var(--text2);text-align:center">${r.tahun || '—'}</td>
       <td style="font-size:11px;color:var(--text2)">${r.category ? hl(r.category) : '—'}</td>
       <td style="text-align:right" class="money">${fmtFull(r.total)}</td>
       <td style="color:var(--text2);font-size:11px">${r.metode}</td>
@@ -2030,6 +2201,7 @@ function showDetail(idx) {
       ${field('No. Invoice', r.noInvoice)}
       ${field('No. FPPI', r.noFPPI)}
       ${field('Category', r.category)}
+      ${field('Tahun', r.tahun)}
       ${field('Total Claim', '<span style="font-size:16px;font-weight:700;color:var(--accent)">' + fmtFull(r.total) + '</span>')}
       ${field('Metode Pembayaran', r.metode)}
       ${field('Keterangan', r.ket, true)}
@@ -2075,8 +2247,8 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal()
 // ==================== EXPORT ====================
 function exportCSV() {
   const scope = filteredData.length > 0 ? filteredData : (curTab === 'all' ? allData : allData.filter(r => r.pt === curTab));
-  const headers = ['PT','No Invoice','Customer','Keterangan','Category','Total Claim','Metode','Status Invoice','Status Bayar'];
-  const rows = scope.map(r => [r.pt, r.noInvoice, r.customer, r.ket, r.category, r.total, r.metode, r.feedbackFinance, r.statusBayar]);
+  const headers = ['PT','No Invoice','Customer','Keterangan','Tahun','Category','Total Claim','Metode','Status Invoice','Status Bayar'];
+  const rows = scope.map(r => [r.pt, r.noInvoice, r.customer, r.ket, r.tahun, r.category, r.total, r.metode, r.feedbackFinance, r.statusBayar]);
   let csv = headers.join(',') + '\n';
   rows.forEach(r => { csv += r.map(v => '"' + String(v).replace(/"/g,'""') + '"').join(',') + '\n'; });
   const blob = new Blob(['\ufeff'+csv], { type: 'text/csv;charset=utf-8' });
@@ -2088,8 +2260,8 @@ function exportCSV() {
 
 function exportExcel() {
   const scope = filteredData.length > 0 ? filteredData : (curTab === 'all' ? allData : allData.filter(r => r.pt === curTab));
-  const data = [['PT','No Invoice','Customer','Keterangan','Category','Total Claim','Metode','Status Invoice','Status Bayar']];
-  scope.forEach(r => data.push([r.pt, r.noInvoice, r.customer, r.ket, r.category, r.total, r.metode, r.feedbackFinance, r.statusBayar]));
+  const data = [['PT','No Invoice','Customer','Keterangan','Tahun','Category','Total Claim','Metode','Status Invoice','Status Bayar']];
+  scope.forEach(r => data.push([r.pt, r.noInvoice, r.customer, r.ket, r.tahun, r.category, r.total, r.metode, r.feedbackFinance, r.statusBayar]));
   const ws = XLSX.utils.aoa_to_sheet(data);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Invoice Export');
