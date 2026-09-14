@@ -2224,12 +2224,27 @@ function addBeforeAfterSheet_(wb, snapA, snapB) {
     return row;
   }
   // Tulis nilai selisih dengan warna hijau (naik) / merah (turun) otomatis
-  function writeDeltaCell(row, colIdx, diff, isMoney) {
+  // type: 'money' (format ribuan id-ID), 'point' (dibulatin 1 desimal, buat persen-poin
+  // seperti Collection Rate), atau default 'count' (integer apa adanya).
+  function writeDeltaCell(row, colIdx, diff, type) {
     const cell = row.getCell(colIdx);
-    cell.value = (diff > 0 ? '▲ +' : (diff < 0 ? '▼ ' : '— ')) + (isMoney ? Math.abs(diff).toLocaleString('id-ID') : diff);
+    const isMoney = type === true || type === 'money'; // 'true' dipertahankan utk kompatibilitas pemanggilan lama
+    const isPoint = type === 'point';
+    const formatted = isMoney ? Math.abs(diff).toLocaleString('id-ID')
+                     : isPoint ? Math.abs(diff).toFixed(1)
+                     : diff; // count: pertahankan tanda asli seperti perilaku sebelumnya
+    cell.value = (diff > 0 ? '▲ +' : (diff < 0 ? '▼ ' : '— ')) + formatted;
     cell.font = { bold:true, color:{ argb: diff > 0 ? GREEN : (diff < 0 ? RED : 'FF64748B') } };
     cell.alignment = { horizontal:'right' };
     cell.border = thinBorder;
+  }
+  // Baris highlight untuk metrik paling penting (Sudah Bayar) — biar CEO langsung
+  // ke-arahkan mata ke sini duluan, bukan tenggelam di antara baris lain.
+  function styleHighlightRow(row) {
+    row.eachCell(cell => {
+      cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFECFDF5'} };
+      cell.font = Object.assign({}, cell.font, { bold:true });
+    });
   }
   // Tulis % growth (naik/turun) — inilah metrik utama yang gampang dicerna CEO,
   // dibanding angka selisih mentah yang kurang kasih konteks skala perubahan.
@@ -2293,9 +2308,14 @@ function addBeforeAfterSheet_(wb, snapA, snapB) {
   const topLoser = catRowsForInsight.length ? catRowsForInsight.reduce((m, r) => r.pct < m.pct ? r : m) : null;
 
   addGoldSectionTitle(ws, '💡 Executive Insight', 5);
+  const paidPct = calcPct_(oA.paidTotal, oB.paidTotal);
+  const paidDeltaRp = oB.paidTotal - oA.paidTotal;
+  const paidDeltaCount = oB.paidCount - oA.paidCount;
   const insightRows = [
-    `Total nilai claim ${totalPct === null ? 'baru muncul' : (totalPct >= 0 ? 'naik' : 'turun')} ${totalPct === null ? '' : Math.abs(totalPct).toFixed(1) + '%'} — dari ${fmtMoney(oA.total)} menjadi ${fmtMoney(oB.total)}.`,
+    // #1 — metrik paling penting: uang yang SUDAH terbayar, ini yang paling dicari CEO.
+    `✅ Sudah Bayar (yang paling penting): ${paidDeltaRp >= 0 ? 'bertambah' : 'berkurang'} ${fmtMoney(Math.abs(paidDeltaRp))} (${paidPct === null ? '' : (paidPct >= 0 ? '+' : '') + paidPct.toFixed(1) + '%'}) — dari ${fmtMoney(oA.paidTotal)} jadi ${fmtMoney(oB.paidTotal)}, dari ${paidDeltaCount >= 0 ? '+' : ''}${paidDeltaCount} invoice yang kelar dibayar.`,
     `Collection rate (Sudah Bayar / Total tertagih) bergerak dari ${collRateA.toFixed(1)}% ke ${collRateB.toFixed(1)}% (${(collRateB - collRateA) >= 0 ? '+' : ''}${(collRateB - collRateA).toFixed(1)} poin).`,
+    `Total nilai claim ${totalPct === null ? 'baru muncul' : (totalPct >= 0 ? 'naik' : 'turun')} ${totalPct === null ? '' : Math.abs(totalPct).toFixed(1) + '%'} — dari ${fmtMoney(oA.total)} menjadi ${fmtMoney(oB.total)}.`,
     topGainer ? `Category dengan pertumbuhan tertinggi: "${topGainer.key}" (${topGainer.pct >= 0 ? '+' : ''}${topGainer.pct.toFixed(1)}%).` : `Belum ada data category yang bisa dibandingkan.`,
     topLoser && topLoser.key !== (topGainer && topGainer.key) ? `Category yang perlu diperhatikan (menurun paling besar): "${topLoser.key}" (${topLoser.pct.toFixed(1)}%).` : null,
   ].filter(Boolean);
@@ -2320,9 +2340,10 @@ function addBeforeAfterSheet_(wb, snapA, snapB) {
   writeRow(ws, ['Sudah Bayar (Jml)', oA.paidCount, oB.paidCount], [2,3]);
   writeDeltaCell(ws.lastRow, 4, oB.paidCount - oA.paidCount, false);
   writePctCell(ws.lastRow, 5, oA.paidCount, oB.paidCount);
-  writeRow(ws, ['Sudah Bayar (Rp)', oA.paidTotal, oB.paidTotal], [2,3]);
+  writeRow(ws, ['★ Sudah Bayar (Rp)', oA.paidTotal, oB.paidTotal], [2,3]);
   writeDeltaCell(ws.lastRow, 4, oB.paidTotal - oA.paidTotal, true);
   writePctCell(ws.lastRow, 5, oA.paidTotal, oB.paidTotal);
+  styleHighlightRow(ws.lastRow);
   writeRow(ws, ['Belum Bayar (Jml)', oA.unpaidCount, oB.unpaidCount], [2,3]);
   writeDeltaCell(ws.lastRow, 4, oB.unpaidCount - oA.unpaidCount, false);
   writePctCell(ws.lastRow, 5, oA.unpaidCount, oB.unpaidCount);
@@ -2336,7 +2357,8 @@ function addBeforeAfterSheet_(wb, snapA, snapB) {
   writeDeltaCell(ws.lastRow, 4, oB.newTotal - oA.newTotal, true);
   writePctCell(ws.lastRow, 5, oA.newTotal, oB.newTotal);
   writeRow(ws, ['Collection Rate (%)', collRateA.toFixed(1) + '%', collRateB.toFixed(1) + '%']);
-  writeDeltaCell(ws.lastRow, 4, collRateB - collRateA, false);
+  writeDeltaCell(ws.lastRow, 4, collRateB - collRateA, 'point');
+  ws.lastRow.getCell(4).value += ' poin';
   ws.lastRow.getCell(5).value = '';
   ws.lastRow.getCell(5).border = thinBorder;
   ws.addRow([]);
