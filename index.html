@@ -2331,19 +2331,21 @@ function addBeforeAfterSheet_(wb, snapA, snapB) {
   // ---- Ringkasan Overall ----
   addGoldSectionTitle(ws, '📊 Ringkasan Overall', 5);
   styleHeaderRow(ws.addRow(['Metrik', snapA.label, snapB.label, 'Selisih', '% Growth']));
-  writeRow(ws, ['Total Invoice', oA.count, oB.count], [2,3]);
-  writeDeltaCell(ws.lastRow, 4, oB.count - oA.count, false);
-  writePctCell(ws.lastRow, 5, oA.count, oB.count);
-  writeRow(ws, ['Total Nilai Claim (Rp)', oA.total, oB.total], [2,3]);
-  writeDeltaCell(ws.lastRow, 4, oB.total - oA.total, true);
-  writePctCell(ws.lastRow, 5, oA.total, oB.total);
-  writeRow(ws, ['Sudah Bayar (Jml)', oA.paidCount, oB.paidCount], [2,3]);
-  writeDeltaCell(ws.lastRow, 4, oB.paidCount - oA.paidCount, false);
-  writePctCell(ws.lastRow, 5, oA.paidCount, oB.paidCount);
   writeRow(ws, ['★ Sudah Bayar (Rp)', oA.paidTotal, oB.paidTotal], [2,3]);
   writeDeltaCell(ws.lastRow, 4, oB.paidTotal - oA.paidTotal, true);
   writePctCell(ws.lastRow, 5, oA.paidTotal, oB.paidTotal);
   styleHighlightRow(ws.lastRow);
+  writeRow(ws, ['Sudah Bayar (Jml)', oA.paidCount, oB.paidCount], [2,3]);
+  writeDeltaCell(ws.lastRow, 4, oB.paidCount - oA.paidCount, false);
+  writePctCell(ws.lastRow, 5, oA.paidCount, oB.paidCount);
+  styleHighlightRow(ws.lastRow);
+  writeRow(ws, ['Collection Rate (%)', collRateA.toFixed(1) + '%', collRateB.toFixed(1) + '%']);
+  writeDeltaCell(ws.lastRow, 4, collRateB - collRateA, 'point');
+  ws.lastRow.getCell(4).value += ' poin';
+  ws.lastRow.getCell(5).value = '';
+  ws.lastRow.getCell(5).border = thinBorder;
+  styleHighlightRow(ws.lastRow);
+  ws.addRow([]);
   writeRow(ws, ['Belum Bayar (Jml)', oA.unpaidCount, oB.unpaidCount], [2,3]);
   writeDeltaCell(ws.lastRow, 4, oB.unpaidCount - oA.unpaidCount, false);
   writePctCell(ws.lastRow, 5, oA.unpaidCount, oB.unpaidCount);
@@ -2356,11 +2358,13 @@ function addBeforeAfterSheet_(wb, snapA, snapB) {
   writeRow(ws, ['Belum Invoice / New (Rp)', oA.newTotal, oB.newTotal], [2,3]);
   writeDeltaCell(ws.lastRow, 4, oB.newTotal - oA.newTotal, true);
   writePctCell(ws.lastRow, 5, oA.newTotal, oB.newTotal);
-  writeRow(ws, ['Collection Rate (%)', collRateA.toFixed(1) + '%', collRateB.toFixed(1) + '%']);
-  writeDeltaCell(ws.lastRow, 4, collRateB - collRateA, 'point');
-  ws.lastRow.getCell(4).value += ' poin';
-  ws.lastRow.getCell(5).value = '';
-  ws.lastRow.getCell(5).border = thinBorder;
+  ws.addRow([]);
+  writeRow(ws, ['Total Invoice', oA.count, oB.count], [2,3]);
+  writeDeltaCell(ws.lastRow, 4, oB.count - oA.count, false);
+  writePctCell(ws.lastRow, 5, oA.count, oB.count);
+  writeRow(ws, ['Total Nilai Claim (Rp)', oA.total, oB.total], [2,3]);
+  writeDeltaCell(ws.lastRow, 4, oB.total - oA.total, true);
+  writePctCell(ws.lastRow, 5, oA.total, oB.total);
   ws.addRow([]);
 
   // ---- Delta per Tahun ----
@@ -2935,7 +2939,7 @@ function exportPDFOnePager() {
 
   const overall = emptyStat_();
   base.forEach(r => addStatRow_(overall, r));
-  const collectionRate = overall.total > 0 ? (overall.paidTotal / overall.total * 100) : 0;
+  const collectionRate = (overall.paidTotal + overall.unpaidTotal) > 0 ? (overall.paidTotal / (overall.paidTotal + overall.unpaidTotal) * 100) : 0;
   const byPT = groupStatsBy_(base, r => r.pt);
   const byCategory = groupStatsBy_(base, r => r.category && r.category.trim() ? r.category.trim() : 'Tanpa Category');
 
@@ -2980,7 +2984,7 @@ function exportPDFOnePager() {
     head: [['Tahun','Jumlah Invoice','Total Nilai','Sudah Bayar','Belum Bayar','Collection Rate']],
     body: yearKeys.map(yr => {
       const m = byYear[yr];
-      const rate = m.total > 0 ? (m.paidTotal / m.total * 100) : 0;
+      const rate = (m.paidTotal + m.unpaidTotal) > 0 ? (m.paidTotal / (m.paidTotal + m.unpaidTotal) * 100) : 0;
       return [yr, m.count, fmtFull(m.total), fmtFull(m.paidTotal), fmtFull(m.unpaidTotal), rate.toFixed(1) + '%'];
     }),
     theme: 'grid',
@@ -3027,13 +3031,77 @@ function exportPDFOnePager() {
     margin: { left: 20, right: 20 },
   });
 
+  // Cek sisa ruang di halaman; kalau kurang dari 100pt, mulai halaman baru
+  // supaya judul section tidak "kepotong" mepet di bawah halaman.
+  function ensureSpace_(neededPt) {
+    if (y + neededPt > pageHeightGlobal - 40) { doc.addPage(); y = 40; }
+  }
+  const pageHeightGlobal = doc.internal.pageSize.getHeight();
+
+  // ---- Pivot Category x Status (Other Income per category, semua tahun) ----
+  y = doc.lastAutoTable.finalY + 20;
+  ensureSpace_(80);
+  doc.setFont('helvetica','bold'); doc.setFontSize(11);
+  doc.text('Pivot Category x Status Bayar (All Year)', 20, y);
+  y += 8;
+  const pivotAll = buildPivotMatrixForScope_(base);
+  doc.autoTable({
+    startY: y,
+    head: [['Category','Belum Bayar','New','Sudah Bayar','Grand Total']],
+    body: [
+      ...pivotAll.categories.map(c => {
+        const m = pivotAll.matrix[c];
+        return [c, fmtFull(m['BELUM BAYAR']), fmtFull(m['NEW']), fmtFull(m['SUDAH BAYAR']), fmtFull(m.total)];
+      }),
+      ['Grand Total', fmtFull(pivotAll.grand['BELUM BAYAR']), fmtFull(pivotAll.grand['NEW']), fmtFull(pivotAll.grand['SUDAH BAYAR']), fmtFull(pivotAll.grand.total)],
+    ],
+    theme: 'grid',
+    styles: { fontSize: 8, cellPadding: 3.5, textColor: DARK },
+    headStyles: { fillColor: NAVY, textColor: [255,255,255], fontStyle: 'bold' },
+    didParseCell: (data) => {
+      if (data.row.index === pivotAll.categories.length) { data.cell.styles.fontStyle = 'bold'; data.cell.styles.fillColor = [238,240,255]; }
+    },
+    margin: { left: 20, right: 20 },
+  });
+
+  // ---- Before vs After (hanya muncul kalau 2 snapshot dipilih di dashboard) ----
+  const { snapA, snapB } = getSelectedSnapshots_();
+  if (snapA && snapB && snapA.id !== snapB.id) {
+    const oA2 = snapA.summary.overall, oB2 = snapB.summary.overall;
+    const collA2 = (oA2.paidTotal + oA2.unpaidTotal) > 0 ? (oA2.paidTotal / (oA2.paidTotal + oA2.unpaidTotal) * 100) : 0;
+    const collB2 = (oB2.paidTotal + oB2.unpaidTotal) > 0 ? (oB2.paidTotal / (oB2.paidTotal + oB2.unpaidTotal) * 100) : 0;
+    y = doc.lastAutoTable.finalY + 20;
+    ensureSpace_(140);
+    doc.setFont('helvetica','bold'); doc.setFontSize(11);
+    doc.text(`Before vs After  (${snapA.label} → ${snapB.label})`, 20, y);
+    y += 8;
+    const pctRow = (a, b) => { const p = calcPct_(a, b); return p === null ? '▲ Baru' : (p >= 0 ? '▲ +' : '▼ ') + Math.abs(p).toFixed(1) + '%'; };
+    doc.autoTable({
+      startY: y,
+      head: [['Metrik', snapA.label, snapB.label, 'Selisih', '% Growth']],
+      body: [
+        ['★ Sudah Bayar (Rp)', fmtFull(oA2.paidTotal), fmtFull(oB2.paidTotal), fmtFull(oB2.paidTotal - oA2.paidTotal), pctRow(oA2.paidTotal, oB2.paidTotal)],
+        ['Sudah Bayar (Jml)', oA2.paidCount, oB2.paidCount, oB2.paidCount - oA2.paidCount, pctRow(oA2.paidCount, oB2.paidCount)],
+        ['Collection Rate (%)', collA2.toFixed(1) + '%', collB2.toFixed(1) + '%', (collB2 - collA2 >= 0 ? '+' : '') + (collB2 - collA2).toFixed(1) + ' poin', ''],
+        ['Belum Bayar (Rp)', fmtFull(oA2.unpaidTotal), fmtFull(oB2.unpaidTotal), fmtFull(oB2.unpaidTotal - oA2.unpaidTotal), pctRow(oA2.unpaidTotal, oB2.unpaidTotal)],
+        ['Belum Invoice / New (Rp)', fmtFull(oA2.newTotal), fmtFull(oB2.newTotal), fmtFull(oB2.newTotal - oA2.newTotal), pctRow(oA2.newTotal, oB2.newTotal)],
+        ['Total Nilai Claim (Rp)', fmtFull(oA2.total), fmtFull(oB2.total), fmtFull(oB2.total - oA2.total), pctRow(oA2.total, oB2.total)],
+      ],
+      theme: 'grid',
+      styles: { fontSize: 8.5, cellPadding: 4, textColor: DARK },
+      headStyles: { fillColor: NAVY, textColor: [255,255,255], fontStyle: 'bold' },
+      didParseCell: (data) => { if (data.row.index === 0) { data.cell.styles.fontStyle = 'bold'; data.cell.styles.fillColor = [236,253,245]; } },
+      margin: { left: 20, right: 20 },
+    });
+  }
+
   // ---- Footer ----
   const pageHeight = doc.internal.pageSize.getHeight();
   doc.setTextColor(...GREY); doc.setFont('helvetica','italic'); doc.setFontSize(8);
   doc.text('Dibuat otomatis dari Alpro Procurement Dashboard • ' + new Date().toLocaleString('id-ID'), pageWidth/2, pageHeight - 16, { align:'center' });
 
   doc.save(`Ringkasan_Invoice_${scopeLabel.replace(/\s+/g,'_')}_${new Date().toISOString().slice(0,10)}.pdf`);
-  showToast('✓ PDF ringkasan 1 halaman berhasil dibuat!');
+  showToast(snapA && snapB && snapA.id !== snapB.id ? '✓ PDF ringkasan + Pivot + Before/After berhasil dibuat!' : '✓ PDF ringkasan + Pivot Category berhasil dibuat!');
 }
 
 async function exportFullReportExcel() {
@@ -3125,7 +3193,7 @@ async function exportFullReportExcel() {
   writeDataRow(wsSum, ['Sudah Bayar', overall.paidCount, overall.paidTotal], [3]);
   writeDataRow(wsSum, ['Belum Bayar', overall.unpaidCount, overall.unpaidTotal], [3]);
   writeDataRow(wsSum, ['Belum Invoice (New)', overall.newCount, overall.newTotal], [3]);
-  const collectionRate = overall.total > 0 ? (overall.paidTotal / overall.total * 100) : 0;
+  const collectionRate = (overall.paidTotal + overall.unpaidTotal) > 0 ? (overall.paidTotal / (overall.paidTotal + overall.unpaidTotal) * 100) : 0;
   const rateRow = writeDataRow(wsSum, ['Collection Rate', '—', collectionRate.toFixed(1) + '%'], []);
   styleTotalRow(rateRow);
   wsSum.addRow([]);
