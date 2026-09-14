@@ -2977,48 +2977,6 @@ function exportPDFOnePager() {
 
   let y = cardY + cardH + 24;
 
-  // ---- Executive Summary (bahasa Supervisor — biar CEO paham tanpa perlu buka Excel) ----
-  const target = getCollectionTarget_();
-  const gapToTarget = collectionRate - target;
-  const catTotalsForTop = Object.keys(byCategory);
-  const grandCatTotal = catTotalsForTop.reduce((s,k) => s + byCategory[k].total, 0);
-  const topCatKey = catTotalsForTop.sort((a,b) => byCategory[b].total - byCategory[a].total)[0];
-  const topCatPct = topCatKey && grandCatTotal > 0 ? (byCategory[topCatKey].total / grandCatTotal * 100) : 0;
-
-  const summaryLines = [
-    `Sampai ${todayLabel}, total klaim yang tercatat sebesar ${fmtFull(overall.total)} dari ${overall.count} invoice.`,
-    `Yang paling penting buat dilaporkan: dana yang SUDAH DIBAYAR tim Finance baru ${fmtFull(overall.paidTotal)} (${overall.paidCount} invoice), setara Collection Rate ${collectionRate.toFixed(1)}% — ${gapToTarget >= 0 ? 'sudah di atas' : 'masih ' + Math.abs(gapToTarget).toFixed(1) + ' poin di bawah'} target ${target}%.`,
-    `Sisanya, ${fmtFull(overall.unpaidTotal)} (${overall.unpaidCount} invoice) masih BELUM DIBAYAR, dan ${fmtFull(overall.newTotal)} (${overall.newCount} invoice) bahkan BELUM SEMPAT DI-INVOICE. Dua ini yang perlu jadi prioritas follow up tim Finance.`,
-  ];
-  if (topCatKey) {
-    summaryLines.push(`Category "${topCatKey}" adalah penyumbang klaim terbesar (${topCatPct.toFixed(1)}% dari total) — kalau ada kendala penagihan di category ini, dampaknya paling terasa ke angka keseluruhan.`);
-  }
-  if (hasSnapCompare) {
-    const oAsum = snapA.summary.overall, oBsum = snapB.summary.overall;
-    const paidDeltaSum = oBsum.paidTotal - oAsum.paidTotal;
-    const paidPctSum = calcPct_(oAsum.paidTotal, oBsum.paidTotal);
-    summaryLines.push(`Dibanding periode lalu (${snapA.label} -> ${snapB.label}), Sudah Bayar ${paidDeltaSum >= 0 ? 'bertambah' : 'berkurang'} ${fmtFull(Math.abs(paidDeltaSum))}${paidPctSum !== null ? ' (' + (paidPctSum >= 0 ? '+' : '') + paidPctSum.toFixed(1) + '%)' : ''} — progress penagihan ${paidDeltaSum >= 0 ? 'membaik, tapi perlu dicek apakah kecepatannya cukup mengejar tunggakan yang juga ikut naik' : 'melambat dibanding periode sebelumnya'}.`);
-  }
-
-  doc.setFillColor(248, 250, 253);
-  doc.setDrawColor(220, 224, 235);
-  const summaryBoxX = 20, summaryBoxW = pageWidth - 40;
-  doc.setFont('helvetica','normal'); doc.setFontSize(9);
-  const wrapped = summaryLines.map(t => doc.splitTextToSize('•  ' + t, summaryBoxW - 20));
-  const lineH = 12.5;
-  const totalLines = wrapped.reduce((s, arr) => s + arr.length, 0);
-  const boxH = 26 + totalLines * lineH + (summaryLines.length - 1) * 4;
-  doc.roundedRect(summaryBoxX, y, summaryBoxW, boxH, 4, 4, 'FD');
-  doc.setTextColor(...DARK); doc.setFont('helvetica','bold'); doc.setFontSize(10.5);
-  doc.text('Executive Summary', summaryBoxX + 10, y + 16);
-  let ty = y + 32;
-  doc.setFont('helvetica','normal'); doc.setFontSize(9);
-  wrapped.forEach(lines => {
-    doc.text(lines, summaryBoxX + 10, ty);
-    ty += lines.length * lineH + 4;
-  });
-  y += boxH + 20;
-
   doc.setTextColor(...DARK); doc.setFont('helvetica','bold'); doc.setFontSize(11);
   doc.text('Trend per Tahun', 20, y);
   y += 8;
@@ -3137,6 +3095,49 @@ function exportPDFOnePager() {
       margin: { left: 20, right: 20 },
     });
   }
+
+  // ---- Executive Summary (bahasa Supervisor — biar CEO paham tanpa perlu buka Excel) ----
+  y = doc.lastAutoTable.finalY + 20;
+  const target = getCollectionTarget_();
+  const gapToTarget = collectionRate - target;
+  const catTotalsForTop = Object.keys(byCategory);
+  const grandCatTotal = catTotalsForTop.reduce((s,k) => s + byCategory[k].total, 0);
+  const topCatKey = catTotalsForTop.sort((a,b) => byCategory[b].total - byCategory[a].total)[0];
+  const topCatPct = topCatKey && grandCatTotal > 0 ? (byCategory[topCatKey].total / grandCatTotal * 100) : 0;
+
+  const summaryLines = [
+    `Sampai ${todayLabel}, total klaim yang tercatat sebesar ${fmtFull(overall.total)} dari ${overall.count} invoice.`,
+    `Yang paling penting buat dilaporkan: dana yang SUDAH DIBAYAR tim Finance baru ${fmtFull(overall.paidTotal)} (${overall.paidCount} invoice), setara Collection Rate ${collectionRate.toFixed(1)}% — ${gapToTarget >= 0 ? 'sudah di atas' : 'masih ' + Math.abs(gapToTarget).toFixed(1) + ' poin di bawah'} target ${target}%.`,
+    `Sisanya, ${fmtFull(overall.unpaidTotal)} (${overall.unpaidCount} invoice) masih BELUM DIBAYAR, dan ${fmtFull(overall.newTotal)} (${overall.newCount} invoice) BELUM DI-INVOICE. Dua ini yang perlu jadi prioritas follow up tim Finance.`,
+  ];
+  if (topCatKey) {
+    summaryLines.push(`Category "${topCatKey}" adalah penyumbang klaim terbesar (${topCatPct.toFixed(1)}% dari total) — kalau ada kendala penagihan di category ini, dampaknya paling terasa ke angka keseluruhan.`);
+  }
+  if (hasSnapCompare) {
+    const oAsum = snapA.summary.overall, oBsum = snapB.summary.overall;
+    const paidDeltaSum = oBsum.paidTotal - oAsum.paidTotal;
+    const paidPctSum = calcPct_(oAsum.paidTotal, oBsum.paidTotal);
+    summaryLines.push(`Dibanding periode lalu (${snapA.label} -> ${snapB.label}), Sudah Bayar ${paidDeltaSum >= 0 ? 'bertambah' : 'berkurang'} ${fmtFull(Math.abs(paidDeltaSum))}${paidPctSum !== null ? ' (' + (paidPctSum >= 0 ? '+' : '') + paidPctSum.toFixed(1) + '%)' : ''} — progress penagihan ${paidDeltaSum >= 0 ? 'membaik, tapi perlu dicek apakah kecepatannya cukup mengejar tunggakan yang juga ikut naik' : 'melambat dibanding periode sebelumnya'}.`);
+  }
+
+  doc.setFont('helvetica','normal'); doc.setFontSize(9);
+  const wrapped = summaryLines.map(t => doc.splitTextToSize('•  ' + t, pageWidth - 60));
+  const lineH = 12.5;
+  const totalLines = wrapped.reduce((s, arr) => s + arr.length, 0);
+  const boxH = 26 + totalLines * lineH + (summaryLines.length - 1) * 4;
+  ensureSpace_(boxH);
+  doc.setFillColor(248, 250, 253);
+  doc.setDrawColor(220, 224, 235);
+  const summaryBoxX = 20, summaryBoxW = pageWidth - 40;
+  doc.roundedRect(summaryBoxX, y, summaryBoxW, boxH, 4, 4, 'FD');
+  doc.setTextColor(...DARK); doc.setFont('helvetica','bold'); doc.setFontSize(10.5);
+  doc.text('Executive Summary', summaryBoxX + 10, y + 16);
+  let ty = y + 32;
+  doc.setFont('helvetica','normal'); doc.setFontSize(9);
+  wrapped.forEach(lines => {
+    doc.text(lines, summaryBoxX + 10, ty);
+    ty += lines.length * lineH + 4;
+  });
 
   // ---- Footer ----
   const pageHeight = doc.internal.pageSize.getHeight();
