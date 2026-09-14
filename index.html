@@ -2979,17 +2979,24 @@ function exportPDFOnePager() {
   y += 8;
   const byYear = groupStatsBy_(base, getYearKey_);
   const yearKeys = Object.keys(byYear).sort((a,b) => { if (a==='Tanpa Tahun') return 1; if (b==='Tanpa Tahun') return -1; return b.localeCompare(a); });
+  const yearGrandPdf = emptyStat_();
+  yearKeys.forEach(yr => Object.keys(yearGrandPdf).forEach(k => yearGrandPdf[k] += byYear[yr][k]));
+  const yearRateGrandPdf = (yearGrandPdf.paidTotal + yearGrandPdf.unpaidTotal) > 0 ? (yearGrandPdf.paidTotal / (yearGrandPdf.paidTotal + yearGrandPdf.unpaidTotal) * 100) : 0;
   doc.autoTable({
     startY: y,
     head: [['Tahun','Jumlah Invoice','Total Nilai','Sudah Bayar','Belum Bayar','Collection Rate']],
-    body: yearKeys.map(yr => {
-      const m = byYear[yr];
-      const rate = (m.paidTotal + m.unpaidTotal) > 0 ? (m.paidTotal / (m.paidTotal + m.unpaidTotal) * 100) : 0;
-      return [yr, m.count, fmtFull(m.total), fmtFull(m.paidTotal), fmtFull(m.unpaidTotal), rate.toFixed(1) + '%'];
-    }),
+    body: [
+      ...yearKeys.map(yr => {
+        const m = byYear[yr];
+        const rate = (m.paidTotal + m.unpaidTotal) > 0 ? (m.paidTotal / (m.paidTotal + m.unpaidTotal) * 100) : 0;
+        return [yr, m.count, fmtFull(m.total), fmtFull(m.paidTotal), fmtFull(m.unpaidTotal), rate.toFixed(1) + '%'];
+      }),
+      ['Grand Total', yearGrandPdf.count, fmtFull(yearGrandPdf.total), fmtFull(yearGrandPdf.paidTotal), fmtFull(yearGrandPdf.unpaidTotal), yearRateGrandPdf.toFixed(1) + '%'],
+    ],
     theme: 'grid',
     styles: { fontSize: 8.5, cellPadding: 4, textColor: DARK },
     headStyles: { fillColor: NAVY, textColor: [255,255,255], fontStyle: 'bold' },
+    didParseCell: (data) => { if (data.section === 'body' && data.row.index === yearKeys.length) { data.cell.styles.fontStyle = 'bold'; data.cell.styles.fillColor = [230,234,245]; } },
     margin: { left: 20, right: 20 },
   });
 
@@ -2998,16 +3005,22 @@ function exportPDFOnePager() {
   doc.text('Progress per PT', 20, y);
   y += 8;
   const ptKeys = Object.keys(byPT).sort((a,b) => byPT[b].total - byPT[a].total);
+  const ptGrandPdf = emptyStat_();
+  ptKeys.forEach(pt => Object.keys(ptGrandPdf).forEach(k => ptGrandPdf[k] += byPT[pt][k]));
   doc.autoTable({
     startY: y,
     head: [['PT','Total Invoice','Total Nilai','Sudah Bayar','Belum Bayar','New']],
-    body: ptKeys.map(pt => {
-      const m = byPT[pt];
-      return [pt, m.count, fmtFull(m.total), fmtFull(m.paidTotal), fmtFull(m.unpaidTotal), fmtFull(m.newTotal)];
-    }),
+    body: [
+      ...ptKeys.map(pt => {
+        const m = byPT[pt];
+        return [pt, m.count, fmtFull(m.total), fmtFull(m.paidTotal), fmtFull(m.unpaidTotal), fmtFull(m.newTotal)];
+      }),
+      ['Grand Total', ptGrandPdf.count, fmtFull(ptGrandPdf.total), fmtFull(ptGrandPdf.paidTotal), fmtFull(ptGrandPdf.unpaidTotal), fmtFull(ptGrandPdf.newTotal)],
+    ],
     theme: 'grid',
     styles: { fontSize: 8.5, cellPadding: 4, textColor: DARK },
     headStyles: { fillColor: NAVY, textColor: [255,255,255], fontStyle: 'bold' },
+    didParseCell: (data) => { if (data.section === 'body' && data.row.index === ptKeys.length) { data.cell.styles.fontStyle = 'bold'; data.cell.styles.fillColor = [230,234,245]; } },
     margin: { left: 20, right: 20 },
   });
 
@@ -3067,12 +3080,16 @@ function exportPDFOnePager() {
         ['Collection Rate (%)', collA2.toFixed(1) + '%', collB2.toFixed(1) + '%', (collB2 - collA2 >= 0 ? '+' : '') + (collB2 - collA2).toFixed(1) + ' poin', ''],
         ['Belum Bayar (Rp)', fmtFull(oA2.unpaidTotal), fmtFull(oB2.unpaidTotal), fmtFull(oB2.unpaidTotal - oA2.unpaidTotal), pctRow(oA2.unpaidTotal, oB2.unpaidTotal)],
         ['Belum Invoice / New (Rp)', fmtFull(oA2.newTotal), fmtFull(oB2.newTotal), fmtFull(oB2.newTotal - oA2.newTotal), pctRow(oA2.newTotal, oB2.newTotal)],
-        ['Total Nilai Claim (Rp)', fmtFull(oA2.total), fmtFull(oB2.total), fmtFull(oB2.total - oA2.total), pctRow(oA2.total, oB2.total)],
+        ['# Total Nilai Claim (Rp)', fmtFull(oA2.total), fmtFull(oB2.total), fmtFull(oB2.total - oA2.total), pctRow(oA2.total, oB2.total)],
       ],
       theme: 'grid',
       styles: { fontSize: 8.5, cellPadding: 4, textColor: DARK },
       headStyles: { fillColor: NAVY, textColor: [255,255,255], fontStyle: 'bold' },
-      didParseCell: (data) => { if (data.section === 'body' && data.row.index === 0) { data.cell.styles.fontStyle = 'bold'; data.cell.styles.fillColor = [236,253,245]; } },
+      didParseCell: (data) => {
+        if (data.section !== 'body') return;
+        if (data.row.index === 0) { data.cell.styles.fontStyle = 'bold'; data.cell.styles.fillColor = [236,253,245]; }
+        if (data.row.index === 5) { data.cell.styles.fontStyle = 'bold'; data.cell.styles.fillColor = [255,251,235]; }
+      },
       margin: { left: 20, right: 20 },
     });
   }
